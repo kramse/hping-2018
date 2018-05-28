@@ -1,12 +1,12 @@
-/* 
- * $smu-mark$ 
- * $name: globals.h$ 
- * $author: Salvatore Sanfilippo <antirez@invece.org>$ 
- * $copyright: Copyright (C) 1999 by Salvatore Sanfilippo$ 
- * $license: This software is under GPL version 2 of license$ 
- * $date: Fri Nov  5 11:55:47 MET 1999$ 
- * $rev: 9$ 
- */ 
+/*
+ * $smu-mark$
+ * $name: globals.h$
+ * $author: Salvatore Sanfilippo <antirez@invece.org>$
+ * $copyright: Copyright (C) 1999 by Salvatore Sanfilippo$
+ * $license: This software is under GPL version 2 of license$
+ * $date: Fri Nov  5 11:55:47 MET 1999$
+ * $rev: 9$
+ */
 
 /* $Id: globals.h,v 1.3 2004/06/18 09:53:11 antirez Exp $ */
 
@@ -96,6 +96,8 @@ extern int	opt_debug,
 		base_dst_port,
 		dst_port,
 		src_port,
+		vxdst_port,
+		vxsrc_port,
 		initsport,
 		sequence,
 		src_winsize,

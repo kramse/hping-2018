@@ -1,12 +1,12 @@
-/* 
- * $smu-mark$ 
- * $name: main.c$ 
- * $author: Salvatore Sanfilippo <antirez@invece.org>$ 
- * $copyright: Copyright (C) 1999 by Salvatore Sanfilippo$ 
- * $license: This software is under GPL version 2 of license$ 
- * $date: Fri Nov  5 11:55:48 MET 1999$ 
- * $rev: 8$ 
- */ 
+/*
+ * $smu-mark$
+ * $name: main.c$
+ * $author: Salvatore Sanfilippo <antirez@invece.org>$
+ * $copyright: Copyright (C) 1999 by Salvatore Sanfilippo$
+ * $license: This software is under GPL version 2 of license$
+ * $date: Fri Nov  5 11:55:48 MET 1999$
+ * $rev: 8$
+ */
 
 /*
  * hping official page at http://www.kyuzz.org/antirez
@@ -115,6 +115,8 @@ int
 	base_dst_port	= DEFAULT_DPORT,
 	dst_port	= DEFAULT_DPORT,
 	src_port,
+	vxdst_port	= DEFAULT_VX_PORT,
+	vxsrc_port	= DEFAULT_VX_PORT,
 	sequence	= 0,
 	initsport	= DEFAULT_INITSPORT,
 	src_winsize	= DEFAULT_SRCWINSIZE,
@@ -344,7 +346,7 @@ int main(int argc, char **argv)
 		if (setflags[0] == '\0')    strcat(setflags, "NO FLAGS are");
 		hdr_size = IPHDR_SIZE + TCPHDR_SIZE;
 	}
-	
+
 	printf("HPING %s (%s %s): %s set, %d headers + %d data bytes\n",
 		targetname,
 		ifname,

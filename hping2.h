@@ -1,12 +1,12 @@
-/* 
- * $smu-mark$ 
- * $name: hping2.h$ 
- * $author: Salvatore Sanfilippo <antirez@invece.org>$ 
- * $copyright: Copyright (C) 1999 by Salvatore Sanfilippo$ 
- * $license: This software is under GPL version 2 of license$ 
- * $date: Fri Nov  5 11:55:48 MET 1999$ 
- * $rev: 9$ 
- */ 
+/*
+ * $smu-mark$
+ * $name: hping2.h$
+ * $author: Salvatore Sanfilippo <antirez@invece.org>$
+ * $copyright: Copyright (C) 1999 by Salvatore Sanfilippo$
+ * $license: This software is under GPL version 2 of license$
+ * $date: Fri Nov  5 11:55:48 MET 1999$
+ * $rev: 9$
+ */
 
 /* $Id: hping2.h,v 1.4 2004/06/04 07:22:38 antirez Exp $ */
 
@@ -58,6 +58,14 @@
 #define IPHDR_SIZE	sizeof(struct myiphdr)
 #endif
 
+#ifndef VXLANHDR_SIZE
+#define VXLANHDR_SIZE	sizeof(struct myvxlanhdr)
+#endif
+
+#ifndef ETHERHDR_SIZE
+#define ETHERHDR_SIZE	sizeof(struct myetherhdr)
+#endif
+
 /* wait X seconds after reached to sent packets in oreder to display replies */
 #define COUNTREACHED_TIMEOUT 1
 
@@ -99,7 +107,7 @@
 /* packet size (physical header size + ip header + tcp header + 0 data bytes) */
 #ifndef IP_MAX_SIZE
 #define IP_MAX_SIZE	65535
-#endif 
+#endif
 
 /* absolute offsets */
 #define ABS_OFFSETIP	linkhdr_size
@@ -127,6 +135,8 @@
 #define DEFAULT_RAW_IP_PROTOCOL		6 /* TCP */
 #define DEFAULT_TRACEROUTE_TTL		1
 
+#define DEFAULT_VX_PORT	    4789	/* default dest. port */
+
 #define BIND_NONE	0		/* no bind */
 #define BIND_DPORT	1		/* bind destination port */
 #define BIND_TTL	2		/* bind ip->ttl */
@@ -135,7 +145,7 @@
 #define DEFAULT_CS_WINDOW   300
 #define DEFAULT_CS_WINDOW_SHIFT 5
 #define DEFAULT_CS_VECTOR_LEN   10
-	
+
 /* fragmentation defines */
 #define MF ((unsigned short)0x2000)	/* more fragments */
 #define DF ((unsigned short)0x4000)	/* dont fragment */
@@ -275,7 +285,7 @@ struct myiphdr {
 /*
  * UDP header
  */
-struct myudphdr { 
+struct myudphdr {
 	__u16 uh_sport;     /* source port */
 	__u16 uh_dport;     /* destination port */
 	__u16 uh_ulen;      /* udp length */
@@ -345,6 +355,32 @@ struct pseudohdr
 };
 
 #define PSEUDOHDR_SIZE sizeof(struct pseudohdr)
+
+
+/*
+ * VXLAN header
+ */
+struct myvxlanhdr {
+        __u8    flags;
+				__u8    reserved1;
+				__u8    reserved2;
+				__u8    reserved3;
+				__u8    vni_high;
+				__u8    vni_med;
+				__u8    vni_low;
+				__u8    reserved4;
+};
+
+/*
+ * Ethernet header
+ */
+struct myetherhdr {
+				unsigned char dst_mac[6];
+				unsigned char src_mac[6];
+				__u16    type;
+};
+
+
 
 /*
  * hping replies delay table

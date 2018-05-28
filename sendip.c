@@ -1,12 +1,12 @@
-/* 
- * $smu-mark$ 
- * $name: sendip.c$ 
- * $author: Salvatore Sanfilippo <antirez@invece.org>$ 
- * $copyright: Copyright (C) 1999 by Salvatore Sanfilippo$ 
- * $license: This software is under GPL version 2 of license$ 
- * $date: Fri Nov  5 11:55:49 MET 1999$ 
- * $rev: 8$ 
- */ 
+/*
+ * $smu-mark$
+ * $name: sendip.c$
+ * $author: Salvatore Sanfilippo <antirez@invece.org>$
+ * $copyright: Copyright (C) 1999 by Salvatore Sanfilippo$
+ * $license: This software is under GPL version 2 of license$
+ * $date: Fri Nov  5 11:55:49 MET 1999$
+ * $rev: 8$
+ */
 
 /* $Id: sendip.c,v 1.2 2004/04/09 23:38:56 antirez Exp $ */
 
@@ -25,10 +25,20 @@ void send_ip (char* src, char *dst, char *data, unsigned int datalen,
 		int more_fragments, unsigned short fragoff, char *options,
 		char optlen)
 {
-	char		*packet;
+	char		*packet, *vxpacket;
 	int		result,
-			packetsize;
-	struct myiphdr	*ip;
+			packetsize,vxpacketsize;
+	struct myiphdr	*ip,*vxip;
+	int vxlanmode=1;
+	int vni;
+	struct myudphdr		*udp;
+	struct myvxlanhdr		*vxlan;
+	struct myetherhdr		*etherpacket;
+
+	char dst_mac[6] = "AAAAAA";
+	char src_mac[6] = "BBBBBB";
+
+	vxpacketsize = IPHDR_SIZE *2 + UDPHDR_SIZE + optlen + datalen;
 
 	packetsize = IPHDR_SIZE + optlen + datalen;
 	if ( (packet = malloc(packetsize)) == NULL) {
@@ -48,7 +58,13 @@ void send_ip (char* src, char *dst, char *data, unsigned int datalen,
 	ip->ihl		= (IPHDR_SIZE + optlen + 3) >> 2;
 	ip->tos		= ip_tos;
 
-#if defined OSTYPE_DARWIN || defined OSTYPE_FREEBSD || defined OSTYPE_NETBSD || defined OSTYPE_BSDI
+#if defined OSTYPE_DARWIN
+	/* FreeBSD */
+	/* NetBSD */
+		ip->tot_len	= htons(packetsize);
+#endif
+
+#if defined OSTYPE_FREEBSD || defined OSTYPE_NETBSD || defined OSTYPE_BSDI
 /* FreeBSD */
 /* NetBSD */
 	ip->tot_len	= packetsize;
@@ -96,20 +112,91 @@ void send_ip (char* src, char *dst, char *data, unsigned int datalen,
 	if (options != NULL)
 		memcpy(packet+IPHDR_SIZE, options, optlen);
 
-	/* copies data */
-	memcpy(packet + IPHDR_SIZE + optlen, data, datalen);
-	
-    if (opt_debug == TRUE)
-    {
-        unsigned int i;
+	/* Make it into a VXLAN packet, add IP/UDP */
+	if (vxlanmode != 0) {
+		vxpacketsize = packetsize + IPHDR_SIZE + UDPHDR_SIZE + VXLANHDR_SIZE + ETHERHDR_SIZE ;
+		if ( (vxpacket = malloc(vxpacketsize)) == NULL) {
+			perror("[send_ip] malloc() VXLAN");
+			return;
+		}
+		memset(vxpacket, 0, packetsize);
 
-        for (i=0; i<packetsize; i++)
-            printf("%.2X ", packet[i]&255);
-        printf("\n");
-    }
-	result = sendto(sockraw, packet, packetsize, 0,
+
+		vxip = (struct myiphdr*) vxpacket;
+		/* build VXLAN ip header */
+		vxip->version	= 4;
+		vxip->ihl		= (IPHDR_SIZE + optlen + 3) >> 2;
+		vxip->tos		= ip_tos;
+		/* copy src and dst address */
+		memcpy(&vxip->saddr, src, sizeof(vxip->saddr));
+		memcpy(&vxip->daddr, dst, sizeof(vxip->daddr));
+		vxip->ttl		= src_ttl;
+		if (!opt_fragment)
+		{
+			vxip->id		= (src_id == -1) ?
+				htons((unsigned short) rand()) :
+				htons((unsigned short) src_id);
+		}
+		#if defined OSTYPE_DARWIN || defined OSTYPE_FREEBSD || defined OSTYPE_NETBSD || defined OSTYPE_BSDI
+		/* FreeBSD */
+		/* NetBSD */
+			vxip->tot_len	= vxpacketsize;
+		#else
+		/* Linux */
+		/* OpenBSD */
+			vxip->tot_len	= htons(vxpacketsize);
+		#endif
+
+		vxip->protocol = 17;	/* VXLAN is UDP  */
+		udp =  (struct myudphdr*) (vxpacket+IPHDR_SIZE);
+		/* udp header */
+		udp->uh_dport	= htons(vxdst_port);
+		udp->uh_sport	= htons(vxsrc_port);
+		udp->uh_ulen	= htons(vxpacketsize-20);
+//		udp->uh_sum = 0 ;  // Already zeroed, so skip
+
+		vxlan =  (struct myvxlanhdr*) (vxpacket+IPHDR_SIZE+UDPHDR_SIZE);
+		vxlan->flags	= 8;
+		vni = 2;
+//		vxlan->vni_high	= htons(vni % 65536);
+//		vxlan->vni_med	= htons((vni - vxlan->vni_high * 65536 )   % 256);
+//		vxlan->vni_low	= htons(vni - vxlan->vni_med - vxlan->vni_med * 256 );
+		vxlan->vni_low	= vni;
+
+		// Only IPv4 right now
+		etherpacket =  (struct myetherhdr*) (vxpacket+IPHDR_SIZE+UDPHDR_SIZE+VXLANHDR_SIZE);
+		memcpy(&etherpacket->dst_mac, dst_mac, 6);
+		memcpy(&etherpacket->src_mac, src_mac, 6);
+		etherpacket->type	= htons(0x0800);
+
+		memcpy(packet + IPHDR_SIZE + optlen, data, datalen);
+		memcpy(vxpacket + IPHDR_SIZE + UDPHDR_SIZE + VXLANHDR_SIZE + ETHERHDR_SIZE , packet, packetsize);
+
+		if (opt_debug == TRUE) {
+			unsigned int i;
+			for (i=0; i<packetsize; i++)
+				printf("%.2X ", packet[i]&255);
+				printf("\n");
+		}
+		free(packet);
+		packet = vxpacket;
+		if (opt_debug == TRUE)
+			{
+					unsigned int i;
+
+					for (i=0; i<vxpacketsize; i++)
+							printf("%.2X ", vxpacket[i]&255);
+					printf("\n");
+			}
+	}
+	else {
+		/* copies data */
+		memcpy(packet + IPHDR_SIZE + optlen, data, datalen);
+	}
+
+	result = sendto(sockraw, vxpacket, vxpacketsize, 0,
 		(struct sockaddr*)&remote, sizeof(remote));
-	
+
 	if (result == -1 && errno != EINTR && !opt_rand_dest && !opt_rand_source) {
 		perror("[send_ip] sendto");
 		if (close(sockraw) == -1)
