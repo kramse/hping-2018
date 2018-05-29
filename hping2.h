@@ -63,7 +63,7 @@
 #endif
 
 #ifndef ETHERHDR_SIZE
-#define ETHERHDR_SIZE	sizeof(struct myetherhdr)
+#define ETHERHDR_SIZE	sizeof(struct myvxetherhdr)
 #endif
 
 /* wait X seconds after reached to sent packets in oreder to display replies */
@@ -374,9 +374,9 @@ struct myvxlanhdr {
 /*
  * Ethernet header
  */
-struct myetherhdr {
-				unsigned char dst_mac[6];
-				unsigned char src_mac[6];
+struct myvxetherhdr {
+				unsigned char vxdst_mac[6];
+				unsigned char vxsrc_mac[6];
 				__u16    type;
 };
 

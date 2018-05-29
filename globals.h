@@ -98,6 +98,7 @@ extern int	opt_debug,
 		src_port,
 		vxdst_port,
 		vxsrc_port,
+		vxvni,
 		initsport,
 		sequence,
 		src_winsize,
@@ -134,6 +135,10 @@ extern char	ifname[1024],
 		rsign[1024],
 		ip_opt[40],
 		ip_optlen,
+		vxsrcaddr[1024],
+		vxdstaddr[1024],
+		vxsrcmac[1024],
+		vxdstmac[1024],
 		*opt_scanports;
 
 extern struct sockaddr_in icmp_ip_src, icmp_ip_dst, icmp_gw, local, remote;

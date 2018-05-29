@@ -117,6 +117,7 @@ int
 	src_port,
 	vxdst_port	= DEFAULT_VX_PORT,
 	vxsrc_port	= DEFAULT_VX_PORT,
+	vxvni = 0,
 	sequence	= 0,
 	initsport	= DEFAULT_INITSPORT,
 	src_winsize	= DEFAULT_SRCWINSIZE,
@@ -144,6 +145,10 @@ char
 	ifname		[1024] = {'\0'},
 	ifstraddr	[1024],
 	spoofaddr	[1024],
+	vxsrcaddr[1024],
+	vxdstaddr[1024],
+	vxsrcmac[1024],
+	vxdstmac[1024],
 	icmp_ip_srcip	[1024],
 	icmp_ip_dstip	[1024],
 	icmp_gwip	[1024],
@@ -163,6 +168,7 @@ struct sockaddr_in
 	icmp_ip_src,
 	icmp_ip_dst,
 	icmp_gw,
+	vxlan,
 	local,
 	remote;
 
@@ -266,6 +272,15 @@ int main(int argc, char **argv)
 		resolve((struct sockaddr*)&local, ifstraddr);
 	else
 		resolve((struct sockaddr*)&local, spoofaddr);
+
+	if (vxsrcaddr[0] == '\0')
+		resolve((struct sockaddr*)&vxlan, ifstraddr);
+	else
+		resolve((struct sockaddr*)&vxlan, vxsrcaddr);
+	if (vxdstaddr[0] == '\0')
+		resolve((struct sockaddr*)&vxlan, ifstraddr);
+	else
+		resolve((struct sockaddr*)&vxlan, vxdstaddr);
 
 	if (icmp_ip_srcip[0] == '\0')
 		resolve((struct sockaddr*)&icmp_ip_src, "1.2.3.4");

@@ -30,7 +30,9 @@ enum {	OPT_COUNT, OPT_INTERVAL, OPT_NUMERIC, OPT_QUIET, OPT_INTERFACE,
 	OPT_SETSEQ, OPT_SETACK, OPT_ICMPTYPE, OPT_ICMPCODE, OPT_END,
 	OPT_RROUTE, OPT_IPPROTO, OPT_ICMP_IPVER, OPT_ICMP_IPHLEN,
 	OPT_ICMP_IPLEN, OPT_ICMP_IPID, OPT_ICMP_IPPROTO, OPT_ICMP_CKSUM,
-	OPT_ICMP_TS, OPT_ICMP_ADDR, OPT_TCPEXITCODE, OPT_FAST, OPT_TR_KEEP_TTL,
+	OPT_ICMP_TS, OPT_ICMP_ADDR, OPT_VXSOURCEADDR, OPT_VXDESTADDR,
+	OPT_VXSOURCEPORT, OPT_VXDESTPORT, OPT_VXSOURCEMAC, OPT_VXDESTMAC,
+	OPT_VXVNI, OPT_TCPEXITCODE, OPT_FAST, OPT_TR_KEEP_TTL,
 	OPT_TCP_TIMESTAMP, OPT_TR_STOP, OPT_TR_NO_RTT, OPT_ICMP_HELP,
 	OPT_RAND_DEST, OPT_RAND_SOURCE, OPT_LSRR, OPT_SSRR, OPT_ROUTE_HELP,
 	OPT_ICMP_IPSRC, OPT_ICMP_IPDST, OPT_ICMP_SRCPORT, OPT_ICMP_DSTPORT,
@@ -104,6 +106,13 @@ static struct ago_optlist hping_optlist[] = {
 	{ '\0', "icmp-cksum",	OPT_ICMP_CKSUM,   	AGO_NEEDARG|AGO_EXCEPT0 },
 	{ '\0',	"icmp-ts",	OPT_ICMP_TS,		AGO_NOARG },
 	{ '\0', "icmp-addr",	OPT_ICMP_ADDR,		AGO_NOARG },
+	{ '\0',	"vxlan-source-addr",	OPT_VXSOURCEADDR,		AGO_NEEDARG|AGO_EXCEPT0 },
+	{ '\0',	"vxlan-dest-addr",	OPT_VXDESTADDR,		AGO_NEEDARG|AGO_EXCEPT0 },
+	{ '\0',	"vxlan-source-port",	OPT_VXSOURCEPORT,		AGO_NEEDARG|AGO_EXCEPT0 },
+	{ '\0',	"vxlan-dest-port",	OPT_VXDESTPORT,		AGO_NEEDARG|AGO_EXCEPT0 },
+	{ '\0',	"vxlan-source-mac",	OPT_VXSOURCEMAC,		AGO_NEEDARG|AGO_EXCEPT0 },
+	{ '\0',	"vxlan-dest-mac",	OPT_VXDESTMAC,		AGO_NEEDARG|AGO_EXCEPT0 },
+	{ '\0',	"vxlan-vni",	OPT_VXVNI,		AGO_NEEDARG|AGO_EXCEPT0 },
 	{ '\0', "tcpexitcode",	OPT_TCPEXITCODE,	AGO_NOARG },
 	{ '\0',	"fast",		OPT_FAST,		AGO_NOARG|AGO_EXCEPT0 },
 	{ '\0',	"faster",	OPT_FASTER,		AGO_NOARG|AGO_EXCEPT0 },
@@ -242,7 +251,7 @@ int parse_options(int argc, char **argv)
 				opt_waitinusec = TRUE;
 				usec_delay.it_value.tv_sec =
 				usec_delay.it_interval.tv_sec = 0;
-				usec_delay.it_value.tv_usec = 
+				usec_delay.it_value.tv_usec =
 				usec_delay.it_interval.tv_usec =
 					atol(ago_optarg+1);
 			}
@@ -351,6 +360,27 @@ int parse_options(int argc, char **argv)
 		case OPT_ICMP_ADDR:
 			opt_icmpmode = TRUE;
 			opt_icmptype = 17;
+			break;
+		case OPT_VXSOURCEADDR:
+			strlcpy (vxsrcaddr, ago_optarg, 1024);
+			break;
+		case OPT_VXDESTADDR:
+			strlcpy (vxdstaddr, ago_optarg, 1024);
+			break;
+		case OPT_VXSOURCEPORT:
+			vxsrc_port = strtol(ago_optarg, NULL, 0);
+			break;
+		case OPT_VXDESTPORT:
+			vxdst_port = strtol(ago_optarg, NULL, 0);
+			break;
+		case OPT_VXSOURCEMAC:
+			strlcpy (vxsrcmac, ago_optarg, 1024);
+			break;
+		case OPT_VXDESTMAC:
+			strlcpy (vxdstmac, ago_optarg, 1024);
+			break;
+		case OPT_VXVNI:
+			vxvni = strtol(ago_optarg, NULL, 0);
 			break;
 		case OPT_UDP:
 			opt_udpmode = TRUE;
@@ -501,7 +531,7 @@ int parse_options(int argc, char **argv)
 			opt_waitinusec = TRUE;
 			usec_delay.it_value.tv_sec =
 			usec_delay.it_interval.tv_sec = 0;
-			usec_delay.it_value.tv_usec = 
+			usec_delay.it_value.tv_usec =
 			usec_delay.it_interval.tv_usec = 100000;
 			break;
 		case OPT_FASTER:
@@ -509,7 +539,7 @@ int parse_options(int argc, char **argv)
 			opt_waitinusec = TRUE;
 			usec_delay.it_value.tv_sec =
 			usec_delay.it_interval.tv_sec = 0;
-			usec_delay.it_value.tv_usec = 
+			usec_delay.it_value.tv_usec =
 			usec_delay.it_interval.tv_usec = 1;
 		case OPT_TR_KEEP_TTL:
 			opt_tr_keep_ttl = TRUE;
@@ -684,7 +714,7 @@ int parse_options(int argc, char **argv)
 		opt_waitinusec = TRUE;
 		usec_delay.it_value.tv_sec =
 		usec_delay.it_interval.tv_sec = 0;
-		usec_delay.it_value.tv_usec = 
+		usec_delay.it_value.tv_usec =
 		usec_delay.it_interval.tv_usec = 0;
 	}
 
