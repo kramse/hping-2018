@@ -127,8 +127,10 @@ void send_ip (char* src, char *dst, char *data, unsigned int datalen,
 		vxip->ihl		= (IPHDR_SIZE + optlen + 3) >> 2;
 		vxip->tos		= ip_tos;
 		/* copy src and dst address */
-		memcpy(&vxip->saddr, src, sizeof(vxip->saddr));
-		memcpy(&vxip->daddr, dst, sizeof(vxip->daddr));
+		memcpy(&vxip->saddr, (struct sockaddr*)&vxlan_local.sin_addr.s_addr, sizeof(vxip->saddr));
+		memcpy(&vxip->daddr, (struct sockaddr*)&vxlan_remote.sin_addr.s_addr, sizeof(vxip->daddr));
+		//(struct sockaddr*)&vxlan_local.sin_addr.s_addr
+
 		vxip->ttl		= src_ttl;
 		if (!opt_fragment)
 		{

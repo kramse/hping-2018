@@ -141,7 +141,7 @@ extern char	ifname[1024],
 		vxdstmac[1024],
 		*opt_scanports;
 
-extern struct sockaddr_in icmp_ip_src, icmp_ip_dst, icmp_gw, local, remote;
+extern struct sockaddr_in icmp_ip_src, icmp_ip_dst, icmp_gw, vxlan_local, local, vxlan_remote, remote;
 extern struct itimerval usec_delay;
 extern volatile struct delaytable_element delaytable[TABLESIZE];
 extern struct hcmphdr *hcmphdr_p;

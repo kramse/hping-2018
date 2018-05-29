@@ -168,8 +168,9 @@ struct sockaddr_in
 	icmp_ip_src,
 	icmp_ip_dst,
 	icmp_gw,
-	vxlan,
+	vxlan_local,
 	local,
+	vxlan_remote,
 	remote;
 
 struct itimerval usec_delay;
@@ -274,13 +275,13 @@ int main(int argc, char **argv)
 		resolve((struct sockaddr*)&local, spoofaddr);
 
 	if (vxsrcaddr[0] == '\0')
-		resolve((struct sockaddr*)&vxlan, ifstraddr);
+		resolve((struct sockaddr*)&vxlan_local, ifstraddr);
 	else
-		resolve((struct sockaddr*)&vxlan, vxsrcaddr);
+		resolve((struct sockaddr*)&vxlan_local, vxsrcaddr);
 	if (vxdstaddr[0] == '\0')
-		resolve((struct sockaddr*)&vxlan, ifstraddr);
+		resolve((struct sockaddr*)&vxlan_remote, ifstraddr);
 	else
-		resolve((struct sockaddr*)&vxlan, vxdstaddr);
+		resolve((struct sockaddr*)&vxlan_remote, vxdstaddr);
 
 	if (icmp_ip_srcip[0] == '\0')
 		resolve((struct sockaddr*)&icmp_ip_src, "1.2.3.4");
