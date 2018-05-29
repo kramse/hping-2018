@@ -23,10 +23,31 @@ $ make
 $ su
 # make install
 
+Kali Linux 2018, do the following
+
+If you get this:
+libpcap_stuff.c:19:10: fatal error: net/bpf.h: No such file or directory
+ #include <net/bpf.h>
+          ^~~~~~~~~~~
+compilation terminated.
+Makefile:66: recipe for target 'libpcap_stuff.o' failed
+make: *** [libpcap_stuff.o] Error 1
+
+Do this:
+apt install libpcap-dev
+ln -s /usr/include/pcap/bpf.h /usr/include/net/bpf.h
+
+If you get:
+/usr/bin/ld: cannot find -ltcl
+
+Then do:
+apt install tcl-dev
+
+
 FreeBSD, OpenBSD, NetBSD
 ------------------------
 
-You will need the libpcap and the gmake utility installed on your system. 
+You will need the libpcap and the gmake utility installed on your system.
 
 $ ./configure
 $ gmake
