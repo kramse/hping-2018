@@ -258,6 +258,9 @@
 #define ICMP_EXC_TTL            0       /* TTL count exceeded           */
 #define ICMP_EXC_FRAGTIME       1       /* Fragment Reass time exceeded */
 
+#define MAC_ANY "00:00:00:00:00:00"
+#define MAC_BCAST "FF:FF:FF:FF:FF:FF"
+
 /*
  * IP header
  */
@@ -375,8 +378,8 @@ struct myvxlanhdr {
  * Ethernet header
  */
 struct myvxetherhdr {
-				unsigned char vxdst_mac[6];
-				unsigned char vxsrc_mac[6];
+				__u8 vxdest[6];
+				__u8 vxsource[6];
 				__u16    type;
 };
 

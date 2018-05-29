@@ -146,6 +146,9 @@ extern struct itimerval usec_delay;
 extern volatile struct delaytable_element delaytable[TABLESIZE];
 extern struct hcmphdr *hcmphdr_p;
 
+extern struct ether_addr *temp_mac_p;
+extern char vxdst_mac[6], vxsrc_mac[6];
+
 #include <pcap.h>
 extern pcap_t *pcapfp;
 extern char errbuf[PCAP_ERRBUF_SIZE];

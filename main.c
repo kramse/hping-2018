@@ -21,6 +21,7 @@
 #include <stdlib.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
+#include <net/ethernet.h>
 #include <arpa/inet.h>
 #include <signal.h>
 #include <time.h>
@@ -179,6 +180,9 @@ volatile struct delaytable_element delaytable[TABLESIZE];
 struct hcmphdr *hcmphdr_p; /* global pointer used by send_hcmp to transfer
 			      hcmp headers to data_handler */
 
+struct ether_addr *temp_mac_p;
+char vxdst_mac[6], vxsrc_mac[6];
+
 pcap_t *pcapfp;
 char errbuf[PCAP_ERRBUF_SIZE];
 struct pcap_pkthdr hdr;
@@ -269,6 +273,7 @@ int main(int argc, char **argv)
 		exit(1);
 	}
 
+
 	if (spoofaddr[0] == '\0')
 		resolve((struct sockaddr*)&local, ifstraddr);
 	else
@@ -282,6 +287,24 @@ int main(int argc, char **argv)
 		resolve((struct sockaddr*)&vxlan_remote, ifstraddr);
 	else
 		resolve((struct sockaddr*)&vxlan_remote, vxdstaddr);
+
+		// ether_aton makes a static buffer
+	if (vxdstmac[0] == '\0') {
+		temp_mac_p = ether_aton("ff:ff:ff:ff:ff:ff");
+		memcpy(vxdst_mac, temp_mac_p, 6);
+	}
+	else {
+		temp_mac_p = ether_aton(vxdstmac);
+		memcpy(vxdst_mac, temp_mac_p, 6);
+	}
+	if (vxsrcmac[0] == '\0') {
+		temp_mac_p = ether_aton("f0:0d:f0:0d:f0:0d");
+		memcpy(vxsrc_mac, temp_mac_p, 6);
+	}
+	else {
+		temp_mac_p = ether_aton(vxsrcmac);
+		memcpy(vxsrc_mac, temp_mac_p, 6);
+	}
 
 	if (icmp_ip_srcip[0] == '\0')
 		resolve((struct sockaddr*)&icmp_ip_src, "1.2.3.4");

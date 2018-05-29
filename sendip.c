@@ -33,9 +33,7 @@ void send_ip (char* src, char *dst, char *data, unsigned int datalen,
 	struct myudphdr		*udp;
 	struct myvxlanhdr		*vxlan;
 	struct myvxetherhdr		*etherpacket;
-
-	char vxdst_mac[6] = "AAAAAA";
-	char vxsrc_mac[6] = "BBBBBB";
+	struct ether_addr *ethaddr = NULL;
 
 	vxpacketsize = IPHDR_SIZE *2 + UDPHDR_SIZE + optlen + datalen;
 
@@ -165,8 +163,8 @@ void send_ip (char* src, char *dst, char *data, unsigned int datalen,
 
 		// Only IPv4 right now, type 0x0800, IPv6 would bx 0x86DD
 		etherpacket =  (struct myvxetherhdr*) (vxpacket+IPHDR_SIZE+UDPHDR_SIZE+VXLANHDR_SIZE);
-		memcpy(&etherpacket->vxdst_mac, vxdst_mac, 6);
-		memcpy(&etherpacket->vxsrc_mac, vxsrc_mac, 6);
+		memcpy(&etherpacket->vxdest, vxdst_mac, 6);
+		memcpy(&etherpacket->vxsource, vxsrc_mac, 6);
 		etherpacket->type	= htons(0x0800);
 
 		memcpy(packet + IPHDR_SIZE + optlen, data, datalen);
