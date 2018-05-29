@@ -156,10 +156,10 @@ void send_ip (char* src, char *dst, char *data, unsigned int datalen,
 
 		vxlan =  (struct myvxlanhdr*) (vxpacket+IPHDR_SIZE+UDPHDR_SIZE);
 		vxlan->flags	= 8;
-//		vxlan->vni_high	= htons(vni % 65536);
-//		vxlan->vni_med	= htons((vni - vxlan->vni_high * 65536 )   % 256);
-//		vxlan->vni_low	= htons(vni - vxlan->vni_med - vxlan->vni_med * 256 );
-		vxlan->vni_low	= vxvni;
+		vxlan->vni_high	= vxvni / 65536;
+		vxlan->vni_med	= (vxvni - vxlan->vni_high * 65536 ) / 256;
+		vxlan->vni_low	= vxvni - vxlan->vni_med * 256 - vxlan->vni_high * 65536;
+//		vxlan->vni_low	= vxvni;
 
 		// Only IPv4 right now, type 0x0800, IPv6 would bx 0x86DD
 		etherpacket =  (struct myvxetherhdr*) (vxpacket+IPHDR_SIZE+UDPHDR_SIZE+VXLANHDR_SIZE);
