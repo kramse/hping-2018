@@ -137,7 +137,8 @@ int
 	icmp_ip_dstport	= DEFAULT_DPORT,
 	opt_force_icmp  = FALSE,
 	icmp_cksum	= DEFAULT_ICMP_CKSUM,
-	raw_ip_protocol	= DEFAULT_RAW_IP_PROTOCOL;
+	raw_ip_protocol	= DEFAULT_RAW_IP_PROTOCOL,
+	opt_inet6mode = FALSE;
 
 char
 	datafilename	[1024],
@@ -146,10 +147,10 @@ char
 	ifname		[1024] = {'\0'},
 	ifstraddr	[1024],
 	spoofaddr	[1024],
-	vxsrcaddr[1024],
-	vxdstaddr[1024],
-	vxsrcmac[1024],
-	vxdstmac[1024],
+	vxsrcaddr[1024] = {'\0'},
+	vxdstaddr[1024] = {'\0'},
+	vxsrcmac[1024] = {'\0'},
+	vxdstmac[1024] = {'\0'},
 	icmp_ip_srcip	[1024],
 	icmp_ip_dstip	[1024],
 	icmp_gwip	[1024],
@@ -174,6 +175,8 @@ struct sockaddr_in
 	vxlan_remote,
 	remote;
 
+struct sockaddr_in6 remote6;
+
 struct itimerval usec_delay;
 volatile struct delaytable_element delaytable[TABLESIZE];
 
@@ -190,8 +193,11 @@ struct pcap_pkthdr hdr;
 /* main */
 int main(int argc, char **argv)
 {
+	char setmode[1024] = {'\0'};
 	char setflags[1024] = {'\0'};
 	int c, hdr_size;
+
+	fprintf(stderr, "DEBUG: hping3 Entering main \n");
 
 	/* Check for the scripting mode */
 	if (argc == 1 || (argc > 1 && !strcmp(argv[1], "exec"))) {
@@ -210,10 +216,17 @@ int main(int argc, char **argv)
 	}
 
 	if (parse_options(argc, argv) == -1) {
-		printf("hping2: missing host argument\n"
-			"Try `hping2 --help' for more information.\n");
+		printf("hping: missing host argument\n"
+			"Try `hping --help' for more information.\n");
 		exit(1);
 	}
+
+	/* IPv6 mode? */
+	if (opt_inet6mode) {
+		fprintf(stderr,
+			"hping in IPv6 inet6mode, highly experimental - check output!\n");
+	}
+
 
 	/* reverse sign */
 	if (opt_sign || opt_listenmode) {
@@ -228,14 +241,23 @@ int main(int argc, char **argv)
 	}
 
 	/* get target address before interface processing */
-	if ((!opt_listenmode && !opt_safe) && !opt_rand_dest)
-		resolve((struct sockaddr*)&remote, targetname);
+	if ((!opt_listenmode && !opt_safe) && !opt_rand_dest) {
+		if (!opt_inet6mode) {
+			resolve((struct sockaddr*)&remote, targetname);
+		}
+		else {
+			resolve6((struct sockaddr*)&remote6, targetname);
+		}
+	}
 
 	if (opt_rand_dest) {
 		strlcpy(targetstraddr, targetname, sizeof(targetstraddr));
-	} else {
+	} else if (!opt_inet6mode) {
 		strlcpy(targetstraddr, inet_ntoa(remote.sin_addr),
-			sizeof(targetstraddr));
+		sizeof(targetstraddr));
+		}
+		else {
+			inet_ntop(AF_INET6, &remote6.sin6_addr, targetstraddr, INET6_ADDRSTRLEN);
 	}
 
 	/* get interface's name and address */
@@ -248,6 +270,7 @@ int main(int argc, char **argv)
 		printf("using %s, addr: %s, MTU: %d\n",
 			ifname, ifstraddr, h_if_mtu);
 	}
+
 
 	/* open raw socket */
 	sockraw = open_sockraw();
@@ -273,12 +296,11 @@ int main(int argc, char **argv)
 		exit(1);
 	}
 
-
 	if (spoofaddr[0] == '\0')
 		resolve((struct sockaddr*)&local, ifstraddr);
 	else
 		resolve((struct sockaddr*)&local, spoofaddr);
-
+/*	fprintf(stderr, "hping vxlan mess!\n");
 	if (vxsrcaddr[0] == '\0')
 		resolve((struct sockaddr*)&vxlan_local, ifstraddr);
 	else
@@ -286,9 +308,9 @@ int main(int argc, char **argv)
 	if (vxdstaddr[0] == '\0')
 		resolve((struct sockaddr*)&vxlan_remote, ifstraddr);
 	else
-		resolve((struct sockaddr*)&vxlan_remote, vxdstaddr);
+		resolve((struct sockaddr*)&vxlan_remote, vxdstaddr)
 
-		// ether_aton makes a static buffer
+	// ether_aton makes a static buffer
 	if (vxdstmac[0] == '\0') {
 		temp_mac_p = ether_aton("ff:ff:ff:ff:ff:ff");
 		memcpy(vxdst_mac, temp_mac_p, 6);
@@ -304,7 +326,7 @@ int main(int argc, char **argv)
 	else {
 		temp_mac_p = ether_aton(vxsrcmac);
 		memcpy(vxsrc_mac, temp_mac_p, 6);
-	}
+	}*/
 
 	if (icmp_ip_srcip[0] == '\0')
 		resolve((struct sockaddr*)&icmp_ip_src, "1.2.3.4");
@@ -343,7 +365,7 @@ int main(int argc, char **argv)
 	/* if we are in listemode enter in listenmain() else  */
 	/* print HPING... bla bla bla and enter in wait_packet() */
 	if (opt_listenmode) {
-		fprintf(stderr, "hping2 listen mode\n");
+		fprintf(stderr, "hping3 listen mode\n");
 
 		/* memory protection */
 		if (memlockall() == -1) {
@@ -364,16 +386,26 @@ int main(int argc, char **argv)
 		/* UNREACHED */
 	}
 
-	if (opt_rawipmode) {
-		strcat(setflags, "raw IP mode");
+	if (opt_inet6mode) {
+		strcat(setmode, "inet6 ");
+		hdr_size = IP6HDR_SIZE;
+	}
+	else {
+		strcat(setmode, "inet ");
 		hdr_size = IPHDR_SIZE;
+	}
+
+	if (opt_rawipmode) {
+		strcat(setmode, "raw IP");
+		hdr_size += IPHDR_SIZE;
 	} else if (opt_icmpmode) {
-		strcat(setflags, "icmp mode");
-		hdr_size = IPHDR_SIZE + ICMPHDR_SIZE;
+		strcat(setmode, "icmp");
+		hdr_size += ICMPHDR_SIZE;
 	} else if (opt_udpmode) {
-		strcat(setflags, "udp mode");
-		hdr_size = IPHDR_SIZE + UDPHDR_SIZE;
+		strcat(setmode, "udp");
+		hdr_size += UDPHDR_SIZE;
 	} else {
+		strcat(setmode, "tcp");
 		if (tcp_th_flags & TH_RST)  strcat(setflags, "R");
 		if (tcp_th_flags & TH_SYN)  strcat(setflags, "S");
 		if (tcp_th_flags & TH_ACK)  strcat(setflags, "A");
@@ -383,13 +415,14 @@ int main(int argc, char **argv)
 		if (tcp_th_flags & TH_X)    strcat(setflags, "X");
 		if (tcp_th_flags & TH_Y)    strcat(setflags, "Y");
 		if (setflags[0] == '\0')    strcat(setflags, "NO FLAGS are");
-		hdr_size = IPHDR_SIZE + TCPHDR_SIZE;
+		hdr_size += TCPHDR_SIZE;
 	}
 
-	printf("HPING %s (%s %s): %s set, %d headers + %d data bytes\n",
+	printf("HPING %s (%s %s): %s %s set, %d headers + %d data bytes\n",
 		targetname,
 		ifname,
 		targetstraddr,
+		setmode,
 		setflags,
 		hdr_size,
 		data_size);

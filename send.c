@@ -1,12 +1,12 @@
-/* 
- * $smu-mark$ 
- * $name: sendudp.c$ 
- * $author: Salvatore Sanfilippo <antirez@invece.org>$ 
- * $copyright: Copyright (C) 1999 by Salvatore Sanfilippo$ 
- * $license: This software is under GPL version 2 of license$ 
- * $date: Fri Nov  5 11:55:49 MET 1999$ 
- * $rev: 8$ 
- */ 
+/*
+ * $smu-mark$
+ * $name: sendudp.c$
+ * $author: Salvatore Sanfilippo <antirez@invece.org>$
+ * $copyright: Copyright (C) 1999 by Salvatore Sanfilippo$
+ * $license: This software is under GPL version 2 of license$
+ * $date: Fri Nov  5 11:55:49 MET 1999$
+ * $rev: 8$
+ */
 
 /* $Id: send.c,v 1.1.1.1 2003/08/31 17:23:53 antirez Exp $ */
 
@@ -76,6 +76,7 @@ void send_packet (int signal_id)
 	if (opt_rawipmode)	send_rawip();
 	else if (opt_icmpmode)	send_icmp();
 	else if (opt_udpmode)	send_udp();
+	else if (opt_inet6mode)	send_inet6();
 	else			send_tcp();
 
 	sent_pkt++;

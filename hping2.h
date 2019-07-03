@@ -57,6 +57,9 @@
 #ifndef IPHDR_SIZE
 #define IPHDR_SIZE	sizeof(struct myiphdr)
 #endif
+#ifndef IP6HDR_SIZE
+#define IP6HDR_SIZE	sizeof(struct myip6hdr)
+#endif
 
 #ifndef VXLANHDR_SIZE
 #define VXLANHDR_SIZE	sizeof(struct myvxlanhdr)
@@ -286,6 +289,28 @@ struct myiphdr {
 };
 
 /*
+ * IPv6 header
+ */
+struct myip6hdr {
+#if defined(__LITTLE_ENDIAN_BITFIELD)
+        __u8    traffic_class:8,
+                version:4;
+#elif defined (__BIG_ENDIAN_BITFIELD)
+        __u8    version:4,
+                traffic_class:8;
+#else
+#error  "Please, edit Makefile and add -D__(LITTLE|BIG)_ENDIAN_BITFIEND"
+#endif
+        __u8   flow_high:4;
+        __u16   flow_low;
+        __u16   payload_len;
+        __u8    next_hdr;
+        __u8    hop_limit;
+        __u8    saddr[16];
+        __u8    daddr[16];
+};
+
+/*
  * UDP header
  */
 struct myudphdr {
@@ -413,6 +438,7 @@ void	send_packet (int signal_id);
 void	send_rawip (void);
 void	send_tcp(void);
 void	send_udp(void);
+void	send_inet6(void);
 void	send_icmp(void);
 void	send_hcmp(__u8 type, __u32 arg);	/* send hcmp packets */
 void	send_ip (char*, char*, char*, unsigned int, int, unsigned short,
@@ -425,6 +451,8 @@ void	show_usage(void);
 void	show_version(void);
 int	resolve_addr(struct sockaddr * addr, char *hostname); /* resolver */
 void	resolve(struct sockaddr*, char*);	/* resolver, exit on err. */
+int	resolve_addr6(struct sockaddr * addr, char *hostname); /* resolver */
+void	resolve6(struct sockaddr*, char*);	/* resolver, exit on err. */
 void	log_icmp_unreach(char*, unsigned short);/* ICMP unreachable logger */
 void	log_icmp_timeexc(char*, unsigned short);/* ICMP time exceeded logger */
 time_t	get_usec(void);				/* return current usec */

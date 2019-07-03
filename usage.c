@@ -1,12 +1,12 @@
-/* 
- * $smu-mark$ 
- * $name: usage.c$ 
- * $author: Salvatore Sanfilippo <antirez@invece.org>$ 
- * $copyright: Copyright (C) 1999 by Salvatore Sanfilippo$ 
- * $license: This software is under GPL version 2 of license$ 
- * $date: Fri Nov  5 11:55:50 MET 1999$ 
- * $rev: 8$ 
- */ 
+/*
+ * $smu-mark$
+ * $name: usage.c$
+ * $author: Salvatore Sanfilippo <antirez@invece.org>$
+ * $copyright: Copyright (C) 1999 by Salvatore Sanfilippo$
+ * $license: This software is under GPL version 2 of license$
+ * $date: Fri Nov  5 11:55:50 MET 1999$
+ * $rev: 8$
+ */
 
 /* $Id: usage.c,v 1.2 2004/06/18 09:53:11 antirez Exp $ */
 
@@ -58,6 +58,8 @@ void	show_usage(void)
 "  --lsrr           loose source routing and record route\n"
 "  --ssrr           strict source routing and record route\n"
 "  -H  --ipproto    set the IP protocol field, only in RAW IP mode\n"
+"IPv6\n"
+"  --inet6          send IPv6 packets\n"
 "ICMP\n"
 "  -C  --icmptype   icmp type (default echo request)\n"
 "  -K  --icmpcode   icmp code (default 0)\n"
@@ -88,6 +90,16 @@ void	show_usage(void)
 "  -Y  --ymas       set Y unused flag (0x80)\n"
 "  --tcpexitcode    use last tcp->th_flags as exit code\n"
 "  --tcp-timestamp  enable the TCP timestamp option to guess the HZ/uptime\n"
+"VXLAN encapsulation\n"
+"  --vxlan-source-addr spoof coming from this\n"
+"  --vxlan-dest-addr send to this destination\n"
+"  --vxlan-source-port VXLAN source port RFC 7384 use 4789 Linux kernel 8472 \n"
+"  --vxlan-dest-port VXLAN destination port\n"
+"  --vxlan-vni VXLAN Network Identifier 24-bit integer\n"
+"  --vxlan-source-mac standard MAC address\n"
+"  --vxlan-dest-mac standard MAC address\n"
+"  --vxlan-rand-source-mac randomize MAC\n"
+"  --vxlan-rand-dest-mac randomiz MAC\n"
 "Clock skew detection\n"
 "  --clock-skew     enable clock skew detection. Try with -S against open port\n"
 "  --clock-skew-win window of time (in seconds) for CS detection. Default 300\n"
