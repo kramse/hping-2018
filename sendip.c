@@ -48,11 +48,11 @@ void send_ip (char* src, char *dst, char *data, unsigned int datalen,
 		// IPv6 adds an Etherframe in front of packet
 		packetsize = IP6HDR_SIZE + optlen + datalen;
 		if ( (ether_frame = malloc(packetsize + ETHERHDR_SIZE)) == NULL) {
-			perror("[send_ip] inet6 malloc()");
-			packet = ether_frame + ETHERHDR_SIZE;
+			perror("[send_ip] inet6 malloc() failed");
 			return;
 		}
 		memset(ether_frame, 0, packetsize + ETHERHDR_SIZE);
+		packet = (ether_frame + ETHERHDR_SIZE);
 	}
 
 	printf("[sendip] Malloc OK\n");
@@ -139,7 +139,8 @@ void send_ip (char* src, char *dst, char *data, unsigned int datalen,
 	{
 		printf("[sendip] Making an IPv6 packet\n");
 		/* IPv6 header */
-		ip6 = (struct myip6hdr *) ether_frame+14 ;
+		ip6 = (struct myip6hdr *) packet;
+		ip6->version	= 6;
 
 		/* IPv6 version (4 bits), Traffic class (8 bits), Flow label (20 bits) */
 		/*ip6->ip6_flow = htonl ((6 << 28) | (0 << 20) | 0);*/
@@ -235,6 +236,7 @@ void send_ip (char* src, char *dst, char *data, unsigned int datalen,
 	if (! opt_inet6mode) {
 		result = sendto(sockraw, packet, packetsize, 0,
 			(struct sockaddr*)&remote, sizeof(remote));
+		free(packet);
 	} else {
 		printf("[sendip] Preparing Ethernet frame with IPv6 packet\n");
 		// To control this part - need more than raw, we use Ethernet frames
@@ -259,6 +261,7 @@ void send_ip (char* src, char *dst, char *data, unsigned int datalen,
 		printf("\n");
 		result = sendto(sockraw, ether_frame, packetsize + ETHERHDR_SIZE , 0,
 				(struct sockaddr *) &rawdevice, sizeof (rawdevice));
+		free(ether_frame);
 	}
 
 	if (result == -1 && errno != EINTR && !opt_rand_dest && !opt_rand_source) {
@@ -269,8 +272,6 @@ void send_ip (char* src, char *dst, char *data, unsigned int datalen,
 			printf("[ipsender] close_pcap failed\n");
 		exit(1);
 	}
-
-	free(packet);
 
 	/* inc packet id for safe protocol */
 	if (opt_safe && !eof_reached)
