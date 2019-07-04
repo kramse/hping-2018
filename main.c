@@ -22,6 +22,9 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <net/ethernet.h>
+#include <net/if.h>
+#include <linux/if_ether.h>
+#include <linux/if_packet.h>
 #include <arpa/inet.h>
 #include <signal.h>
 #include <time.h>
@@ -59,6 +62,7 @@ float
 int
 	sockpacket,
 	sockraw,
+	vxlanmode = 0,
 	sent_pkt = 0,
 	recv_pkt = 0,
 	out_of_sequence_pkt = 0,
@@ -159,6 +163,11 @@ char
 	ip_opt		[40],
 	*opt_scanports = "";
 
+struct ifreq ifr;
+struct sockaddr_ll rawdevice;
+uint8_t src_mac[6] = {0x00,0x16,0x3e,0x5e,0x6c,0x00};
+uint8_t dst_mac[6] = {0x24,0xe9,0xb3,0x52,0x75,0x00};
+
 unsigned char
 	lsr		[255] = {0},
 	ssr		[255] = {0};
@@ -175,7 +184,7 @@ struct sockaddr_in
 	vxlan_remote,
 	remote;
 
-struct sockaddr_in6 remote6;
+struct sockaddr_in6 local6,remote6;
 
 struct itimerval usec_delay;
 volatile struct delaytable_element delaytable[TABLESIZE];
@@ -279,10 +288,12 @@ int main(int argc, char **argv)
 		exit(1);
 	}
 
-	/* set SO_BROADCAST option */
-	socket_broadcast(sockraw);
-	/* set SO_IPHDRINCL option */
-	socket_iphdrincl(sockraw);
+	if (! opt_inet6mode) {
+		/* set SO_BROADCAST option */
+		socket_broadcast(sockraw);
+		/* set SO_IPHDRINCL option */
+		socket_iphdrincl(sockraw);
+	}
 
 	/* open sock packet or libpcap socket */
 	if (open_pcap() == -1) {

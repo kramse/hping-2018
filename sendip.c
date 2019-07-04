@@ -17,6 +17,7 @@
 #include <errno.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <linux/if_packet.h> /* struct sockaddr_ll */
 
 #include "hping2.h"
 #include "globals.h"
@@ -25,25 +26,40 @@ void send_ip (char* src, char *dst, char *data, unsigned int datalen,
 		int more_fragments, unsigned short fragoff, char *options,
 		char optlen)
 {
-	char		*packet, *vxpacket;
+	char	*ether_frame, *packet, *vxpacket;
 	int		result,
 			packetsize,vxpacketsize;
 	struct myiphdr	*ip,*vxip;
-	int vxlanmode=1;
+	struct myip6hdr	*ip6;
 	struct myudphdr		*udp;
 	struct myvxlanhdr		*vxlan;
-	struct myvxetherhdr		*etherpacket;
-	struct ether_addr *ethaddr = NULL;
+	struct myetherhdr		*etherpacket;
 
-	vxpacketsize = IPHDR_SIZE *2 + UDPHDR_SIZE + optlen + datalen;
-
-	packetsize = IPHDR_SIZE + optlen + datalen;
-	if ( (packet = malloc(packetsize)) == NULL) {
-		perror("[send_ip] malloc()");
-		return;
+	// Allocate space for a packet, or IPv6 ethernet header + packet
+	if (!opt_inet6mode ) {
+		packetsize = IPHDR_SIZE + optlen + datalen;
+		if ( (packet = malloc(packetsize)) == NULL) {
+			perror("[send_ip] inet malloc()");
+			return;
+		}
+		memset(packet, 0, packetsize);
+	}
+	else {
+		// IPv6 adds an Etherframe in front of packet
+		packetsize = IP6HDR_SIZE + optlen + datalen;
+		if ( (ether_frame = malloc(packetsize + ETHERHDR_SIZE)) == NULL) {
+			perror("[send_ip] inet6 malloc()");
+			packet = ether_frame + ETHERHDR_SIZE;
+			return;
+		}
+		memset(ether_frame, 0, packetsize + ETHERHDR_SIZE);
 	}
 
-	memset(packet, 0, packetsize);
+	printf("[sendip] Malloc OK\n");
+
+	// Lets make an IPv4 packet
+	if (! opt_inet6mode) {
+
 	ip = (struct myiphdr*) packet;
 
 	/* copy src and dst address */
@@ -109,15 +125,42 @@ void send_ip (char* src, char *dst, char *data, unsigned int datalen,
 	if (options != NULL)
 		memcpy(packet+IPHDR_SIZE, options, optlen);
 
+	printf("Debug packet\n");
+	if (opt_debug == TRUE)
+		{
+				unsigned int i;
+				printf("This is the packet to be sent!\n");
+				for (i=0; i<packetsize; i++)
+						printf("%.2X ", packet[i]&255);
+				printf("\n");
+		}
+	} else
+	// Lets make an IPv6 packet!
+	{
+		printf("[sendip] Making an IPv6 packet\n");
+		/* IPv6 header */
+		ip6 = (struct myip6hdr *) ether_frame+14 ;
+
+		/* IPv6 version (4 bits), Traffic class (8 bits), Flow label (20 bits) */
+		/*ip6->ip6_flow = htonl ((6 << 28) | (0 << 20) | 0);*/
+
+		/* Next header (8 bits): 44 for Frag */
+		ip6->next_hdr = 44;
+
+		/* Hop limit (8 bits): default to maximum value */
+		ip6->hop_limit = 255;
+		printf("[sendip] Making an IPv6 packet - done \n");
+	}
+
 	/* Make it into a VXLAN packet, add IP/UDP */
 	if (vxlanmode != 0) {
+		printf("[sendip] vxlanmode set\n");
 		vxpacketsize = packetsize + IPHDR_SIZE + UDPHDR_SIZE + VXLANHDR_SIZE + ETHERHDR_SIZE ;
 		if ( (vxpacket = malloc(vxpacketsize)) == NULL) {
 			perror("[send_ip] malloc() VXLAN");
 			return;
 		}
 		memset(vxpacket, 0, packetsize);
-
 
 		vxip = (struct myiphdr*) vxpacket;
 		/* build VXLAN ip header */
@@ -162,9 +205,9 @@ void send_ip (char* src, char *dst, char *data, unsigned int datalen,
 //		vxlan->vni_low	= vxvni;
 
 		// Only IPv4 right now, type 0x0800, IPv6 would bx 0x86DD
-		etherpacket =  (struct myvxetherhdr*) (vxpacket+IPHDR_SIZE+UDPHDR_SIZE+VXLANHDR_SIZE);
-		memcpy(&etherpacket->vxdest, vxdst_mac, 6);
-		memcpy(&etherpacket->vxsource, vxsrc_mac, 6);
+		etherpacket =  (struct myetherhdr*) (vxpacket+IPHDR_SIZE+UDPHDR_SIZE+VXLANHDR_SIZE);
+		memcpy(&etherpacket->dest, vxdst_mac, 6);
+		memcpy(&etherpacket->source, vxsrc_mac, 6);
 		etherpacket->type	= htons(0x0800);
 
 		memcpy(packet + IPHDR_SIZE + optlen, data, datalen);
@@ -172,28 +215,51 @@ void send_ip (char* src, char *dst, char *data, unsigned int datalen,
 
 		if (opt_debug == TRUE) {
 			unsigned int i;
-			for (i=0; i<packetsize; i++)
-				printf("%.2X ", packet[i]&255);
-				printf("\n");
+			printf("VXLAN packet debug\n");
+			for (i=0; i<vxpacketsize; i++)
+				printf("%.2X ", vxpacket[i]&255);
+			printf("\n");
 		}
 		free(packet);
 		packet = vxpacket;
-		if (opt_debug == TRUE)
-			{
-					unsigned int i;
-
-					for (i=0; i<vxpacketsize; i++)
-							printf("%.2X ", vxpacket[i]&255);
-					printf("\n");
-			}
 	}
-	else {
+	else if ( ! opt_inet6mode ){
 		/* copies data */
+		printf("[sendip] Segmentation fault here?\n");
 		memcpy(packet + IPHDR_SIZE + optlen, data, datalen);
 	}
 
-	result = sendto(sockraw, vxpacket, vxpacketsize, 0,
-		(struct sockaddr*)&remote, sizeof(remote));
+
+
+	// Sending here?
+	if (! opt_inet6mode) {
+		result = sendto(sockraw, packet, packetsize, 0,
+			(struct sockaddr*)&remote, sizeof(remote));
+	} else {
+		printf("[sendip] Preparing Ethernet frame with IPv6 packet\n");
+		// To control this part - need more than raw, we use Ethernet frames
+		// Todo: incomplete, should find MAC addresses and enter here!
+		/* Destination and Source MAC addresses */
+		//memcpy(ether_frame, dst_mac, 6 * sizeof (uint8_t));
+		//memcpy(ether_frame + 6, src_mac, 6 * sizeof (uint8_t));
+		/* Next is ethernet type code (ETH_P_IPV6 for IPv6) */
+
+
+		// IPv6 needs to be sent as an ethernet frame
+		// Only IPv6 right now, type 0x0800, IPv6 would bx 0x86DD
+		etherpacket =  (struct myetherhdr*) ether_frame;
+		memcpy(&etherpacket->dest, dst_mac, 6);
+		memcpy(&etherpacket->source, src_mac, 6);
+		etherpacket->type	= htons(0x86DD);
+
+		printf("[sendip] This is the Ethernet frame to be sent!\n");
+		unsigned int i;
+		for (i=0; i<packetsize + ETHERHDR_SIZE; i++)
+				printf("%.2X ", ether_frame[i]&255);
+		printf("\n");
+		result = sendto(sockraw, ether_frame, packetsize + ETHERHDR_SIZE , 0,
+				(struct sockaddr *) &rawdevice, sizeof (rawdevice));
+	}
 
 	if (result == -1 && errno != EINTR && !opt_rand_dest && !opt_rand_source) {
 		perror("[send_ip] sendto");

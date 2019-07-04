@@ -367,6 +367,7 @@ int parse_options(int argc, char **argv)
 			break;
 		case OPT_VXDESTADDR:
 			strlcpy (vxdstaddr, ago_optarg, 1024);
+			vxlanmode = 1;
 			break;
 		case OPT_VXSOURCEPORT:
 			vxsrc_port = strtol(ago_optarg, NULL, 0);

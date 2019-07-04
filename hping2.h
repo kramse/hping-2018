@@ -66,7 +66,7 @@
 #endif
 
 #ifndef ETHERHDR_SIZE
-#define ETHERHDR_SIZE	sizeof(struct myvxetherhdr)
+#define ETHERHDR_SIZE	sizeof(struct myetherhdr)
 #endif
 
 /* wait X seconds after reached to sent packets in oreder to display replies */
@@ -402,9 +402,9 @@ struct myvxlanhdr {
 /*
  * Ethernet header
  */
-struct myvxetherhdr {
-				__u8 vxdest[6];
-				__u8 vxsource[6];
+struct myetherhdr {
+				__u8 dest[6];
+				__u8 source[6];
 				__u16    type;
 };
 
