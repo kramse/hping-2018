@@ -290,18 +290,22 @@ struct myiphdr {
 
 /*
  * IPv6 header
+ * Had problems seeing how flow and traffic class are done, may be reversed
  */
 struct myip6hdr {
 #if defined(__LITTLE_ENDIAN_BITFIELD)
-        __u8    traffic_class:8,
+        __u8    traffic_class_high:4,
                 version:4;
+        __u8   flow_high:4,
+               traffic_class_low:4;
 #elif defined (__BIG_ENDIAN_BITFIELD)
         __u8    version:4,
-                traffic_class:8;
+                traffic_class_low:4;
+        __u8   flow_high:4,
+                traffic_class_high:4;
 #else
 #error  "Please, edit Makefile and add -D__(LITTLE|BIG)_ENDIAN_BITFIEND"
 #endif
-        __u8   flow_high:4;
         __u16   flow_low;
         __u16   payload_len;
         __u8    next_hdr;
