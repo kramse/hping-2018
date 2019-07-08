@@ -158,7 +158,7 @@ void send_ip (char* src, char *dst, char *data, unsigned int datalen,
 
 		/* Hop limit (8 bits): default to maximum value */
 		ip6->hop_limit = 64;
-		ip6->payload_len	= htons(packetsize);
+		ip6->payload_len	= htons(packetsize - IP6HDR_SIZE);
 		/* copy src and dst address */
 		memcpy(&ip6->saddr, src, sizeof(ip6->saddr));
 		memcpy(&ip6->daddr, dst, sizeof(ip6->daddr));
