@@ -57,21 +57,36 @@ void send_ip_handler(char *packet, unsigned int size)
 		while(1) {
 			if (remainder <= virtual_mtu)
 				break;
-
-			send_ip((char*)&local.sin_addr,
-				(char*)&remote.sin_addr,
-				packet+frag_offset,
-				virtual_mtu, MF, frag_offset,
-				ip_opt, ip_optlen);
+			if ( ! opt_inet6mode ) {
+				send_ip((char*)&local.sin_addr,
+					(char*)&remote.sin_addr,
+					packet+frag_offset,
+					virtual_mtu, MF, frag_offset,
+					ip_opt, ip_optlen);
+			} else {
+				send_ip((char*)&local6.sin6_addr,
+					(char*)&remote6.sin6_addr,
+					packet+frag_offset,
+					virtual_mtu, MF, frag_offset,
+					ip_opt, ip_optlen);
+			}
 
 			remainder-=virtual_mtu;
 			frag_offset+=virtual_mtu;
 		}
 
-		send_ip((char*)&local.sin_addr,
-			(char*)&remote.sin_addr,
-			packet+frag_offset,
-			remainder, NF, frag_offset,
-			ip_opt, ip_optlen);
+		if ( ! opt_inet6mode ) {
+			send_ip((char*)&local.sin_addr,
+				(char*)&remote.sin_addr,
+				packet+frag_offset,
+				remainder, NF, frag_offset,
+				ip_opt, ip_optlen);
+		} else {
+			send_ip((char*)&local6.sin6_addr,
+				(char*)&remote6.sin6_addr,
+				packet+frag_offset,
+				remainder, NF, frag_offset,
+				ip_opt, ip_optlen);
+		}
 	}
 }

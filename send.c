@@ -76,7 +76,7 @@ void send_packet (int signal_id)
 	if (opt_rawipmode)	send_rawip();
 	else if (opt_icmpmode)	send_icmp();
 	else if (opt_udpmode)	send_udp();
-	else if (opt_inet6mode)	send_inet6();
+//	else if (opt_inet6mode)	send_inet6();
 	else			send_tcp();
 
 	sent_pkt++;

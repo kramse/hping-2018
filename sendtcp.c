@@ -1,12 +1,12 @@
-/* 
- * $smu-mark$ 
- * $name: sendtcp.c$ 
- * $author: Salvatore Sanfilippo <antirez@invece.org>$ 
- * $copyright: Copyright (C) 1999 by Salvatore Sanfilippo$ 
- * $license: This software is under GPL version 2 of license$ 
- * $date: Fri Nov  5 11:55:49 MET 1999$ 
- * $rev: 8$ 
- */ 
+/*
+ * $smu-mark$
+ * $name: sendtcp.c$
+ * $author: Salvatore Sanfilippo <antirez@invece.org>$
+ * $copyright: Copyright (C) 1999 by Salvatore Sanfilippo$
+ * $license: This software is under GPL version 2 of license$
+ * $date: Fri Nov  5 11:55:49 MET 1999$
+ * $rev: 8$
+ */
 
 /* $Id: sendtcp.c,v 1.2 2003/09/01 00:22:06 antirez Exp $ */
 
@@ -28,29 +28,58 @@ void send_tcp(void)
 	char			*packet, *data;
 	struct mytcphdr		*tcp;
 	struct pseudohdr	*pseudoheader;
+	struct pseudohdr6	*pseudoheader6;
 	unsigned char		*tstamp;
 
 	if (opt_tcp_timestamp)
 		tcp_opt_size = 12;
 
 	packet_size = TCPHDR_SIZE + tcp_opt_size + data_size;
-	packet = malloc(PSEUDOHDR_SIZE + packet_size);
-	if (packet == NULL) {
-		perror("[send_tcphdr] malloc()");
-		return;
-	}
-	pseudoheader = (struct pseudohdr*) packet;
-	tcp =  (struct mytcphdr*) (packet+PSEUDOHDR_SIZE);
-	tstamp = (unsigned char*) (packet+PSEUDOHDR_SIZE+TCPHDR_SIZE);
-	data = (char*) (packet+PSEUDOHDR_SIZE+TCPHDR_SIZE+tcp_opt_size);
-	
-	memset(packet, 0, PSEUDOHDR_SIZE+packet_size);
+	printf("[send_tcp] starting with packet_size %d \n", packet_size);
 
-	/* tcp pseudo header */
-	memcpy(&pseudoheader->saddr, &local.sin_addr.s_addr, 4);
-	memcpy(&pseudoheader->daddr, &remote.sin_addr.s_addr, 4);
-	pseudoheader->protocol		= 6; /* tcp */
-	pseudoheader->lenght		= htons(TCPHDR_SIZE+tcp_opt_size+data_size);
+	if ( ! opt_inet6mode ) {
+		printf("[send_tcp] malloc inet4 PSEUDOHDR_SIZE + packet_size %d + %d = %d \n", PSEUDOHDR_SIZE, packet_size, PSEUDOHDR_SIZE + packet_size);
+		packet = malloc(PSEUDOHDR_SIZE + packet_size);
+		if (packet == NULL) {
+			perror("[send_tcphdr] malloc()");
+			return;
+		}
+		pseudoheader = (struct pseudohdr*) packet;
+		tcp =  (struct mytcphdr*) (packet+PSEUDOHDR_SIZE);
+		tstamp = (unsigned char*) (packet+PSEUDOHDR_SIZE+TCPHDR_SIZE);
+		data = (char*) (packet+PSEUDOHDR_SIZE+TCPHDR_SIZE+tcp_opt_size);
+
+		memset(packet, 0, PSEUDOHDR_SIZE+packet_size);
+
+		/* tcp pseudo header */
+		memcpy(&pseudoheader->saddr, &local.sin_addr.s_addr, 4);
+		memcpy(&pseudoheader->daddr, &remote.sin_addr.s_addr, 4);
+	  pseudoheader->protocol		= 6; /* tcp */
+		pseudoheader->lenght		= htons(TCPHDR_SIZE+tcp_opt_size+data_size);
+
+	} else {
+		// IPv6
+		printf("[send_tcp] malloc inet4 PSEUDOHDR6_SIZE + packet_size %d + %d = %d \n", PSEUDOHDR6_SIZE, packet_size, PSEUDOHDR6_SIZE + packet_size);
+		packet = malloc(PSEUDOHDR6_SIZE + packet_size);
+		if (packet == NULL) {
+			perror("[send_tcphdr] malloc() IPv6 sized packet");
+			return;
+		}
+		pseudoheader6 = (struct pseudohdr6*) packet;
+		tcp =  (struct mytcphdr*) (packet+PSEUDOHDR6_SIZE);
+		tstamp = (unsigned char*) (packet+PSEUDOHDR6_SIZE+TCPHDR_SIZE);
+		data = (char*) (packet+PSEUDOHDR6_SIZE+TCPHDR_SIZE+tcp_opt_size);
+
+		memset(packet, 0, PSEUDOHDR6_SIZE+packet_size);
+
+		/* tcp pseudo header */
+		memcpy(&pseudoheader6->saddr, &local6.sin6_addr, 16);
+		memcpy(&pseudoheader6->daddr, &remote6.sin6_addr, 16);
+
+		pseudoheader6->protocol		= 6; /* tcp */
+		pseudoheader6->lenght		= htons(TCPHDR_SIZE+tcp_opt_size+data_size);
+
+	}
 
 	/* tcp header */
 	tcp->th_dport	= htons(dst_port);
@@ -78,18 +107,36 @@ void send_tcp(void)
 	data_handler(data, data_size);
 
 	/* compute checksum */
+	if ( ! opt_inet6mode ) {
 #ifdef STUPID_SOLARIS_CHECKSUM_BUG
 	tcp->th_sum = packet_size;
 #else
 	tcp->th_sum = cksum((u_short*) packet, PSEUDOHDR_SIZE +
 		      packet_size);
 #endif
+	} else {
+		tcp->th_sum = cksum((u_short*) packet, PSEUDOHDR6_SIZE +
+			      packet_size);
+	}
 
 	/* adds this pkt in delaytable */
 	delaytable_add(sequence, src_port, time(NULL), get_usec(), S_SENT);
 
+	if (opt_debug == TRUE) {
+		unsigned int i;
+		printf("[send_tcp] packet debug with pseudo header %d\n", packet_size);
+		for (i=0; i<(PSEUDOHDR6_SIZE+packet_size); i++)
+			printf("%.2X ", packet[i]&255);
+		printf("\n");
+	}
+
+
 	/* send packet */
-	send_ip_handler(packet+PSEUDOHDR_SIZE, packet_size);
+	if ( ! opt_inet6mode ) {
+		send_ip_handler(packet+PSEUDOHDR_SIZE, packet_size);
+	} else {
+		send_ip_handler(packet+PSEUDOHDR6_SIZE, packet_size);
+	}
 	free(packet);
 
 	sequence++;	/* next sequence number */

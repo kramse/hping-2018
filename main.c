@@ -150,6 +150,7 @@ char
 	targetstraddr	[1024],
 	ifname		[1024] = {'\0'},
 	ifstraddr	[1024],
+	ifstraddr6	[1024],
 	spoofaddr	[1024],
 	vxsrcaddr[1024] = {'\0'},
 	vxdstaddr[1024] = {'\0'},
@@ -310,7 +311,13 @@ int main(int argc, char **argv)
 	if (spoofaddr[0] == '\0')
 		resolve((struct sockaddr*)&local, ifstraddr);
 	else
-		resolve((struct sockaddr*)&local, spoofaddr);
+		if (!opt_inet6mode) {
+			resolve((struct sockaddr*)&local, spoofaddr);
+		}
+		else {
+			resolve6((struct sockaddr*)&local6, spoofaddr);
+		}
+
 /*	fprintf(stderr, "hping vxlan mess!\n");
 	if (vxsrcaddr[0] == '\0')
 		resolve((struct sockaddr*)&vxlan_local, ifstraddr);

@@ -35,6 +35,14 @@ void send_ip (char* src, char *dst, char *data, unsigned int datalen,
 	struct myvxlanhdr		*vxlan;
 	struct myetherhdr		*etherpacket;
 
+	if (opt_debug == TRUE) {
+		printf("[send_ip] This is the data received!\n");
+		unsigned int i;
+		for (i=0; i<datalen; i++)
+			printf("%.2X ", data[i]&255);
+			printf("\n");
+	}
+
 	// Allocate space for a packet, or IPv6 ethernet header + packet
 	if (!opt_inet6mode ) {
 		packetsize = IPHDR_SIZE + optlen + datalen;
@@ -146,10 +154,15 @@ void send_ip (char* src, char *dst, char *data, unsigned int datalen,
 		/*ip6->ip6_flow = htonl ((6 << 28) | (0 << 20) | 0);*/
 
 		/* Next header (8 bits): 44 for Frag */
-		ip6->next_hdr = 44;
+		//ip6->next_hdr = 44;
 
 		/* Hop limit (8 bits): default to maximum value */
-		ip6->hop_limit = 255;
+		ip6->hop_limit = 64;
+		ip6->payload_len	= htons(packetsize);
+		/* copy src and dst address */
+		memcpy(&ip6->saddr, src, sizeof(ip6->saddr));
+		memcpy(&ip6->daddr, dst, sizeof(ip6->daddr));
+
 		//printf("[sendip] Making an IPv6 packet - done \n");
 	}
 
@@ -253,6 +266,14 @@ void send_ip (char* src, char *dst, char *data, unsigned int datalen,
 		memcpy(&etherpacket->dest, dst_mac, 6);
 		memcpy(&etherpacket->source, src_mac, 6);
 		etherpacket->type	= htons(0x86DD);
+
+		if (opt_rawipmode)	ip6->next_hdr = raw_ip_protocol;
+		else if	(opt_icmpmode)	ip6->next_hdr = 1;	/* icmp */
+		else if (opt_udpmode)	ip6->next_hdr = 17;	/* udp  */
+		else			ip6->next_hdr = 6;	/* tcp  */
+
+		// Copy rest of packet
+		memcpy(packet + IP6HDR_SIZE + optlen, data, datalen);
 
 		if (opt_debug == TRUE) {
 			printf("[sendip] This is the Ethernet frame to be sent!\n");

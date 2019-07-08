@@ -388,6 +388,17 @@ struct pseudohdr
 
 #define PSEUDOHDR_SIZE sizeof(struct pseudohdr)
 
+struct pseudohdr6
+{
+  __u8  saddr[16];
+  __u8  daddr[16];
+	__u8  zero;
+	__u8  protocol;
+	__u16 lenght;
+};
+
+#define PSEUDOHDR6_SIZE sizeof(struct pseudohdr6)
+
 
 /*
  * VXLAN header
