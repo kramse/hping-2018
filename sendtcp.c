@@ -87,7 +87,7 @@ void send_tcp(void)
 
 	/* sequence number and ack are random if not set */
 	tcp->th_seq = (set_seqnum) ? htonl(tcp_seqnum) : htonl(rand());
-	tcp->th_ack = (set_ack) ? htonl(tcp_ack) : htonl(rand());
+	//tcp->th_ack = (set_ack) ? htonl(tcp_ack) : htonl(rand());
 
 	tcp->th_off	= src_thoff + (tcp_opt_size >> 2);
 	tcp->th_win	= htons(src_winsize);
