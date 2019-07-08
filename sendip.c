@@ -55,7 +55,7 @@ void send_ip (char* src, char *dst, char *data, unsigned int datalen,
 		packet = (ether_frame + ETHERHDR_SIZE);
 	}
 
-	printf("[sendip] Malloc OK\n");
+	//printf("[sendip] Malloc OK\n");
 
 	// Lets make an IPv4 packet
 	if (! opt_inet6mode) {
@@ -137,7 +137,7 @@ void send_ip (char* src, char *dst, char *data, unsigned int datalen,
 	} else
 	// Lets make an IPv6 packet!
 	{
-		printf("[sendip] Making an IPv6 packet\n");
+		//printf("[sendip] Making an IPv6 packet\n");
 		/* IPv6 header */
 		ip6 = (struct myip6hdr *) packet;
 		ip6->version	= 6;
@@ -150,7 +150,7 @@ void send_ip (char* src, char *dst, char *data, unsigned int datalen,
 
 		/* Hop limit (8 bits): default to maximum value */
 		ip6->hop_limit = 255;
-		printf("[sendip] Making an IPv6 packet - done \n");
+		//printf("[sendip] Making an IPv6 packet - done \n");
 	}
 
 	/* Make it into a VXLAN packet, add IP/UDP */
@@ -238,7 +238,7 @@ void send_ip (char* src, char *dst, char *data, unsigned int datalen,
 			(struct sockaddr*)&remote, sizeof(remote));
 		free(packet);
 	} else {
-		printf("[sendip] Preparing Ethernet frame with IPv6 packet\n");
+		//printf("[sendip] Preparing Ethernet frame with IPv6 packet\n");
 		// To control this part - need more than raw, we use Ethernet frames
 		// Todo: incomplete, should find MAC addresses and enter here!
 		/* Destination and Source MAC addresses */
@@ -254,11 +254,13 @@ void send_ip (char* src, char *dst, char *data, unsigned int datalen,
 		memcpy(&etherpacket->source, src_mac, 6);
 		etherpacket->type	= htons(0x86DD);
 
-		printf("[sendip] This is the Ethernet frame to be sent!\n");
-		unsigned int i;
-		for (i=0; i<packetsize + ETHERHDR_SIZE; i++)
+		if (opt_debug == TRUE) {
+			printf("[sendip] This is the Ethernet frame to be sent!\n");
+			unsigned int i;
+			for (i=0; i<packetsize + ETHERHDR_SIZE; i++)
 				printf("%.2X ", ether_frame[i]&255);
-		printf("\n");
+				printf("\n");
+		}
 		result = sendto(sockraw, ether_frame, packetsize + ETHERHDR_SIZE , 0,
 				(struct sockaddr *) &rawdevice, sizeof (rawdevice));
 		free(ether_frame);
