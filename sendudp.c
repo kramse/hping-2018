@@ -32,7 +32,6 @@ void send_udp(void)
 	struct pseudohdr6	*pseudoheader6;
 
 	packet_size = UDPHDR_SIZE + data_size;
-	printf("[send_udp] starting with packet_size %d \n", packet_size);
 
 	if ( !opt_inet6mode ) {
 	packet = malloc(PSEUDOHDR_SIZE + packet_size);
@@ -54,7 +53,6 @@ void send_udp(void)
 
 	} else {
 	// IPv6
-	printf("[send_udp] malloc inet6 PSEUDOHDR6_SIZE + packet_size %d + %d = %d \n", PSEUDOHDR6_SIZE, packet_size, PSEUDOHDR6_SIZE + packet_size);
 	packet = malloc(PSEUDOHDR6_SIZE + packet_size);
 	if (packet == NULL) {
 		perror("[send_udphdr] malloc()");
@@ -64,18 +62,14 @@ void send_udp(void)
 	udp =  (struct myudphdr*) (packet+PSEUDOHDR6_SIZE);
 	data = (char*) (packet+PSEUDOHDR6_SIZE+UDPHDR_SIZE);
 
-	printf("[send_udp] clear");
 	memset(packet, 0, PSEUDOHDR6_SIZE+packet_size);
 
-	printf("[send_udp] pseudo header");
 	/* udp pseudo header */
 	memcpy(&pseudoheader6->saddr, &local6.sin6_addr, 16);
 	memcpy(&pseudoheader6->daddr, &remote6.sin6_addr, 16);
 	pseudoheader6->protocol		= 17; /* udp */
 	pseudoheader6->lenght		= htons(packet_size);
 	}
-
-	printf("[send_udp] udp header");
 
 	/* udp header */
 	udp->uh_dport	= htons(dst_port);
