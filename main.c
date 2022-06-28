@@ -47,6 +47,7 @@ unsigned int
 	ssr_length = 0,
 	tcp_ack;
 
+volatile struct delaytable_element delaytable[TABLESIZE];
 
 unsigned short int
 	data_size = 0;
