@@ -1,10 +1,10 @@
-# $smu-mark$ 
-# $name: Makefile.in$ 
-# $author: Salvatore Sanfilippo 'antirez'$ 
-# $copyright: Copyright (C) 1999 by Salvatore Sanfilippo$ 
-# $license: This software is under GPL version 2 of license$ 
-# $date: Sun Jul 25 17:56:15 MET DST 1999$ 
-# $rev: 3$ 
+# $smu-mark$
+# $name: Makefile.in$
+# $author: Salvatore Sanfilippo 'antirez'$
+# $copyright: Copyright (C) 1999 by Salvatore Sanfilippo$
+# $license: This software is under GPL version 2 of license$
+# $date: Sun Jul 25 17:56:15 MET DST 1999$
+# $rev: 3$
 
 CC= gcc
 AR=/usr/bin/ar
@@ -32,7 +32,7 @@ OBJ=	main.o getifname.o getlhs.o \
 	relid.o sendip_handler.o \
 	libpcap_stuff.o memlockall.o memunlockall.o \
 	memlock.o memunlock.o ip_opt_build.o \
-	display_ipopt.o sendrawip.o signal.o send.o \
+	display_ipopt.o sendrawip.o sendinet6.o signal.o send.o \
 	strlcpy.o arsglue.o random.o scan.o \
 	hstring.o script.o interface.o \
 	adbuf.o hex.o apdutils.o sbignum.o \

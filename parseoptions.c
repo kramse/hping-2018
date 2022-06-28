@@ -38,7 +38,7 @@ enum {	OPT_COUNT, OPT_INTERVAL, OPT_NUMERIC, OPT_QUIET, OPT_INTERFACE,
 	OPT_ICMP_IPSRC, OPT_ICMP_IPDST, OPT_ICMP_SRCPORT, OPT_ICMP_DSTPORT,
 	OPT_ICMP_GW, OPT_FORCE_ICMP, OPT_APD_SEND, OPT_SCAN, OPT_FASTER,
 	OPT_BEEP, OPT_FLOOD, OPT_CLOCK_SKEW, OPT_CS_WINDOW, OPT_CS_WINDOW_SHIFT,
-        OPT_CS_VECTOR_LEN };
+	OPT_INET6, OPT_CS_VECTOR_LEN };
 
 static struct ago_optlist hping_optlist[] = {
 	{ 'c',	"count",	OPT_COUNT,		AGO_NEEDARG },
@@ -138,6 +138,7 @@ static struct ago_optlist hping_optlist[] = {
 	{ '\0', "clock-skew-win", OPT_CS_WINDOW,	AGO_NEEDARG},
 	{ '\0', "clock-skew-win-shift", OPT_CS_WINDOW_SHIFT,	AGO_NEEDARG},
 	{ '\0', "clock-skew-packets-per-sample", OPT_CS_VECTOR_LEN,AGO_NEEDARG},
+	{ '\0',	"inet6",		OPT_INET6,		AGO_NOARG },
 	AGO_LIST_TERM
 };
 
@@ -366,6 +367,7 @@ int parse_options(int argc, char **argv)
 			break;
 		case OPT_VXDESTADDR:
 			strlcpy (vxdstaddr, ago_optarg, 1024);
+			vxlanmode = 1;
 			break;
 		case OPT_VXSOURCEPORT:
 			vxsrc_port = strtol(ago_optarg, NULL, 0);
@@ -583,6 +585,9 @@ int parse_options(int argc, char **argv)
 			break;
 		case OPT_BEEP:
 			opt_beep = TRUE;
+			break;
+		case OPT_INET6:
+			opt_inet6mode = TRUE;
 			break;
 		case OPT_FLOOD:
 			opt_flood = TRUE;

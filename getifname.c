@@ -13,6 +13,8 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>		/* struct sockaddr_in */
+#include <linux/if_packet.h> /* struct sockaddr_ll */
+
 #include <arpa/inet.h>		/* inet_ntoa */
 #include <net/if.h>
 #include <unistd.h>		/* close */
@@ -146,6 +148,35 @@ int get_if_name(void)
 			sizeof(struct sockaddr_in));
 		strlcpy(ifstraddr, inet_ntoa(sa.sin_addr), 1024);
 
+    // get if MAC address.
+    if (ioctl(fd, SIOCGIFHWADDR, (char*)&ifr) == -1) {
+      perror("[get_if_name] ioctl(SIOCGIFHWADDR)");
+      continue;
+    }
+    // Copy source MAC address into src_mac
+    memcpy (src_mac, ifr.ifr_hwaddr.sa_data, 6 * sizeof (uint8_t));
+
+    // Debug code
+    // Report source MAC address to stdout.
+    printf ("[get_if_name] MAC address for interface %s is ", ifname);
+    unsigned int i;
+    for (i=0; i<5; i++) {
+      printf ("%02x:", src_mac[i]);
+    }
+    printf ("%02x\n", src_mac[5]);
+    // Find interface index from interface name and store index in
+    // struct sockaddr_ll rawdevice, which will be used as an argument of sendto().
+    memset (&rawdevice, 0, sizeof (rawdevice));
+    if ((rawdevice.sll_ifindex = if_nametoindex (ifname)) == 0) {
+      perror ("[get_if_name] if_nametoindex() failed to obtain interface index ");
+      return -1;
+    }
+    printf ("[get_if_name] Index for interface %s is %i\n", ifname, rawdevice.sll_ifindex);
+    // Fill out sockaddr_ll.
+    rawdevice.sll_family = AF_PACKET;
+    memcpy (rawdevice.sll_addr, src_mac, 6 * sizeof (uint8_t));
+    rawdevice.sll_halen = 6;
+
 		/* get if mtu */
 		if ( ioctl(fd, SIOCGIFMTU, (char*)&ifr) == -1) {
 			perror("Warning: [get_if_name] ioctl(SIOCGIFMTU)");
@@ -232,7 +263,7 @@ int get_if_name(void)
 		if (!(ifa->ifa_flags & IFF_UP)) {       /* if down */
 			if (opt_debug)
 				printf("DEBUG: DOWN");
-			continue; 
+			continue;
 		}
 
 		if ((ifa->ifa_flags & IFF_LOOPBACK)&&
@@ -253,7 +284,7 @@ int get_if_name(void)
 			memset( &ifr, 0, sizeof(ifr));
 			strlcpy(ifr.ifr_name, ifa->ifa_name, sizeof(ifr.ifr_name));
 			if( sizeof(ifr.ifr_addr) >= ifa->ifa_addr->sa_len )
-				memcpy(&ifr.ifr_addr, ifa->ifa_addr, 
+				memcpy(&ifr.ifr_addr, ifa->ifa_addr,
 				       ifa->ifa_addr->sa_len);
 			if( (s = socket(PF_INET, SOCK_DGRAM, 0)) < 0) {
 				perror("[get_if_name] socket");
@@ -291,9 +322,9 @@ int get_if_name(void)
 			strlcpy(ifstraddr,
 			        inet_ntoa(((struct sockaddr_in *)ifa->ifa_addr)->sin_addr),
 				          1024);
-			
+
 			if( (saved_ifname[0] == 0) ||
-                            (!strncmp(ifa->ifa_name, saved_ifname, 24)) || 
+                            (!strncmp(ifa->ifa_name, saved_ifname, 24)) ||
 			    (((struct sockaddr_in *)ifa->ifa_addr)->sin_addr.s_addr ==
 			       output_if_addr.sin_addr.s_addr) )
 				break; /* asked if found or first UP interface */
@@ -318,7 +349,7 @@ int get_output_if(struct sockaddr_in *dest, struct sockaddr_in *ifip)
 	socklen_t len;
 	int sock_rt, on=1;
 	struct sockaddr_in iface_out;
- 
+
 	memset(&iface_out, 0, sizeof(iface_out));
 	sock_rt = socket(AF_INET, SOCK_DGRAM, 0 );
 
@@ -331,7 +362,7 @@ int get_output_if(struct sockaddr_in *dest, struct sockaddr_in *ifip)
 		close(sock_rt);
 		return -1;
 	}
-  
+
 	if (connect(sock_rt, (struct sockaddr*)dest, sizeof(struct sockaddr_in))
 	    == -1 ) {
 		if (opt_debug)

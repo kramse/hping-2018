@@ -1,8 +1,8 @@
-.TH HPING2 8 "2001 Aug 14"
+.TH HPING3 8 "2001 Aug 14"
 .SH NAME
-hping2 \- send (almost) arbitrary TCP/IP packets to network hosts
+hping3 \- send (almost) arbitrary TCP/IP packets to network hosts
 .SH SYNOPSIS
-.B hping2
+.B hping3
 [
 .B \-hvnqVDzZ012WrfxykQbFSRPAUXYjJBuTG
 ] [
@@ -111,6 +111,31 @@ hping2 \- send (almost) arbitrary TCP/IP packets to network hosts
 .B \-\-rand-source
 ] [
 .B \-\-beep
+] [
+.B \-\-vxlan-source-addr
+.I outer source IP
+] [
+.B \-\-vxlan-dest-addr
+.I outer destination IP
+] [
+.B \-\-vxlan-source-port
+.I source port
+] [
+.B \-\-vxlan-dest-port VXLAN destination port
+.I destination port
+] [
+.B \-\-vxlan-vni VXLAN Network Identifier 24-bit integer
+.I vni
+] [
+.B \-\-vxlan-source-mac
+.I mac
+] [
+.B \-\-vxlan-dest-mac
+.I mac
+] [
+.B \-\-vxlan-rand-source-mac
+] [
+.B \-\-vxlan-rand-dest-mac
 ]
 hostname
 .br
@@ -442,35 +467,37 @@ Alias for --icmptype 13 (to send ICMP timestamp requests).
 .TP
 .I --icmp-addr
 Alias for --icmptype 17 (to send ICMP address mask requests).
+.TP
 
 .SH VXLAN RELATED OPTIONS
+.TP
 This version of hping3 can use VXLAN headers to encapsulate traffic. You typically need to set the right destination and source addresses, and possibly the source and destination ports. Note: it is expected this is a one way, so no responses expected. Purely VXLAN injection into a network.
 .TP
-.I --vxlan-source-addr
+.I [ .B \-\-vxlan-source-addr
 Set VXLAN source address, also called Virtual Tunnel End Points VTEP or VXLAN gateways. Would in a real VXLAN network be the sender which provides the encapsulating, and routing.
 .TP
-.I --vxlan-dest-addr
+.I [ .B \-\-vxlan-dest-addr
 Set VXLAN destination address, also called Virtual Tunnel End Points VTEP or VXLAN gateways. Provides the de-encapsulating, and forwarding.
 .TP
-.I --vxlan-source-port
-Set VXLAN source port, default to 4789.
+.I [ .B \-\-vxlan-source-port
+Set VXLAN source port, default to 4789. RFC 7384 use 4789 Linux kernel 8472
 .TP
-.I --vxlan-dest-port
-Set VXLAN destination port, default to 4789.
+.I [ .B \-\-vxlan-dest-port
+Set VXLAN destination port, default to 4789. RFC 7384 use 4789 Linux kernel 8472.
 .TP
-.I --vxlan-source-mac
+.I [ .B \-\-vxlan-source-mac
 Set source MAC in the Layer 2 Ethernet frame sent over VXLAN.
 .TP
-.I --vxlan-dest-mac
+.I [ .B \-\-vxlan-dest-mac
 Set destination MAC in the Layer 2 Ethernet frame sent over VXLAN.
 .TP
-.I --vxlan-rand-source-mac
+.I [ .B \-\-vxlan-rand-source-mac
 This option enables the random source MAC mode.   hping  will  send packets  with  random  source MAC address. It is interesting to use this option to stress various state tables, and other IP/MAC dynamic tables inside VXLAN gateways. Not implemented yet.
 .TP
-.I --vxlan-rand-dest-mac
+.I [ .B \-\-vxlan-rand-dest-mac
 This option enables the random destination MAC mode.   hping  will  send packets  with  random  source MAC address. It is interesting to use this option to stress various state tables, and other IP/MAC dynamic tables inside VXLAN gateways. Not implemented yet.
 .TP
-.I --vxlan-vni
+.I [ .B \-\-vxlan-vni
 Set VXLAN VNI. Often the same as the destination VLAN.
 .TP
 
