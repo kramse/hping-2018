@@ -1,0 +1,69 @@
+From b97ebf7221a68bf2ca3b21b5d027a0a7d80e312a Mon Sep 17 00:00:00 2001
+From: Romain Francoise <rfrancoise@debian.org>
+Date: Tue, 28 Jun 2022 12:54:31 +0200
+Subject: [PATCH 06/23] Hardcode libtcl version to be that of the default tclsh
+ and add a less maintenance tclsh detection (don't want refresh the patch when
+ new tcl versions)
+
+---
+ configure | 36 +++++++++++++++---------------------
+ 1 file changed, 15 insertions(+), 21 deletions(-)
+
+diff --git a/configure b/configure
+index 3b2c2d8..e136381 100755
+--- a/configure
++++ b/configure
+@@ -61,23 +61,11 @@ esac
+ #
+ # TCL detection
+ #
+-for TCLPATH_TRY in "/usr/bin/" "/usr/local/bin/" "/bin/"
+-do
+-	for TCLVER_TRY in "8.4" "8.3" "8.2" "8.1" "8.0"
+-	do
+-		if [ -z $TCLSH ]
+-		then
+-			TCLSH_TRY=${TCLPATH_TRY}tclsh${TCLVER_TRY}
+-			if [ -f $TCLSH_TRY ]
+-			then
+-				TCLSH=$TCLSH_TRY
+-				echo "===> Found Tclsh in: $TCLSH"
+-			fi
+-		fi
+-	done
+-done
+-if [ -f $TCLSH ]
++TCLSH=$(which tclsh 2>/dev/null)
++
++if [ -f "$TCLSH" ]
+ then
++	echo "===> Found Tclsh in: $TCLSH"
+ 	TCL_VER=`echo puts \\$tcl_version | $TCLSH -`
+ 	USE_TCL='-DUSE_TCL'
+ 	TCL_LIB="-ltcl${TCL_VER}"
+@@ -95,11 +83,17 @@ then
+ 		TCL_LIB=""
+ 		echo "==> WARNING: no Tcl header files found!"
+ 	fi
+-fi
+-if [ -n $USE_TCL ]
+-then
+-	LIBPOSTFIX=`ls -1 /usr/local/lib/ /usr/lib | grep 'libtcl[0-9]' | grep so | sed -e 's/\.so.*//g' -e 's/libtcl//g' | sort -r | head -1`
+-	TCL_LIB="-ltcl${LIBPOSTFIX} -lm -lpthread"
++
++	if [ -n $USE_TCL ]
++	then
++		LIBPOSTFIX=`echo puts \\$tcl_version | $TCLSH -`
++		TCL_LIB="-ltcl${LIBPOSTFIX} -lm -lpthread"
++	fi
++else
++	if [ "$1" != "--no-tcl" ]
++	then
++		echo "==> WARNING: no Tcl binary found!"
++	fi
+ fi
+ 
+ #
+-- 
+2.30.2
+

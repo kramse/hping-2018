@@ -1,0 +1,28 @@
+From 73e34a9349affceceda18aa87d33826b5e0b85b5 Mon Sep 17 00:00:00 2001
+From: Michael Tautschnig <mt@debian.org>
+Date: Tue, 28 Jun 2022 13:47:06 +0200
+Subject: [PATCH 18/23] Conflicting types for variable ip_optlen - globals.h:
+ extern char ip_optlen; - main.c: unsigned ip_optlen; Undefined behaviour if
+ the value of ip_optlen exceeds 127 for any architecture with signed char
+ type.
+
+---
+ main.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/main.c b/main.c
+index cf40bc7..bdbe165 100644
+--- a/main.c
++++ b/main.c
+@@ -156,7 +156,7 @@ unsigned char
+ 	lsr		[255] = {0},
+ 	ssr		[255] = {0};
+ 
+-unsigned
++char
+ 	ip_optlen	= 0;
+ 
+ struct sockaddr_in
+-- 
+2.30.2
+

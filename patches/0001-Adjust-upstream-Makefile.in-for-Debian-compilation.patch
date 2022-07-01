@@ -1,0 +1,52 @@
+From cf70b21ffe28879fa8a62c7a77cf229361b046c0 Mon Sep 17 00:00:00 2001
+From: Romain Francoise <rfrancoise@debian.org>
+Date: Tue, 28 Jun 2022 12:44:59 +0200
+Subject: [PATCH 01/23] Adjust upstream Makefile.in for Debian compilation.
+
+---
+ Makefile.in | 16 +++-------------
+ 1 file changed, 3 insertions(+), 13 deletions(-)
+
+diff --git a/Makefile.in b/Makefile.in
+index 5cccbdd..3c1919d 100644
+--- a/Makefile.in
++++ b/Makefile.in
+@@ -50,14 +50,14 @@ libars.a: $(ARSOBJ)
+ 	$(RANLIB) $@
+ 
+ hping3: byteorder.h $(OBJ)
+-	$(CC) -o hping3 $(CCOPT) $(DEBUG) $(OBJ) -L/usr/local/lib $(PCAP) @SOLARISLIB@ @TCL_LIB@
++	$(CC) -o hping3 $(CCOPT) $(DEBUG) $(OBJ) -L$(prefix)/lib $(PCAP) @SOLARISLIB@ @TCL_LIB@
+ 	@echo
+ 	./hping3 -v
+ 	@echo "use \`make strip' to strip hping3 binary"
+ 	@echo "use \`make install' to install hping3"
+ 
+ hping3-static: byteorder.h $(OBJ)
+-	$(CC) -static -o hping3-static $(CCOPT) $(DEBUG) $(OBJ) -L/usr/local/lib $(PCAP) @SOLARISLIB@ @TCL_LIB@ -ldl
++	$(CC) -static -o hping3-static $(CCOPT) $(DEBUG) $(OBJ) -L$(prefix)/lib $(PCAP) @SOLARISLIB@ @TCL_LIB@ -ldl
+ 
+ byteorder.h:
+ 	./configure
+@@ -72,17 +72,7 @@ distclean:
+ 	rm -rf hping3 *.o byteorder byteorder.h systype.h Makefile libars.a .depend
+ 
+ install: hping3
+-	cp -f hping3 /usr/sbin/
+-	chmod 755 /usr/sbin/hping3
+-	ln -s /usr/sbin/hping3 /usr/sbin/hping
+-	ln -s /usr/sbin/hping3 /usr/sbin/hping2
+-	@if [ -d ${INSTALL_MANPATH}/man8 ]; then \
+-		cp ./docs/hping3.8 ${INSTALL_MANPATH}/man8; \
+-		chmod 644 ${INSTALL_MANPATH}/man8/hping3.8; \
+-	else \
+-		echo "@@@@@@ WARNING @@@@@@"; \
+-		echo "Can't install the man page: ${INSTALL_MANPATH}/man8 does not exist"; \
+-	fi
++	install -m 0755 hping3 $(DESTDIR)/usr/sbin/
+ 
+ strip: hping3
+ 	@ls -l ./hping3
+-- 
+2.30.2
+

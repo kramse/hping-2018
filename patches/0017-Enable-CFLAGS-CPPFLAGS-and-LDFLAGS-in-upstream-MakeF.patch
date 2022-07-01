@@ -1,0 +1,35 @@
+From 04975c8650132da8e9be31c3aaa6e51e1fd4b9f6 Mon Sep 17 00:00:00 2001
+From: Guillaume Delacour <gui@iroqwa.org>
+Date: Tue, 28 Jun 2022 13:46:30 +0200
+Subject: [PATCH 17/23] Enable CFLAGS, CPPFLAGS and LDFLAGS in upstream
+ MakeFile
+
+---
+ Makefile.in | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/Makefile.in b/Makefile.in
+index 3c1919d..cc2a206 100644
+--- a/Makefile.in
++++ b/Makefile.in
+@@ -50,7 +50,7 @@ libars.a: $(ARSOBJ)
+ 	$(RANLIB) $@
+ 
+ hping3: byteorder.h $(OBJ)
+-	$(CC) -o hping3 $(CCOPT) $(DEBUG) $(OBJ) -L$(prefix)/lib $(PCAP) @SOLARISLIB@ @TCL_LIB@
++	$(CC) -o hping3 $(CCOPT) $(CPPFLAGS) $(DEBUG) $(OBJ) -L$(prefix)/lib $(PCAP) @SOLARISLIB@ @TCL_LIB@ $(LDFLAGS)
+ 	@echo
+ 	./hping3 -v
+ 	@echo "use \`make strip' to strip hping3 binary"
+@@ -63,7 +63,7 @@ byteorder.h:
+ 	./configure
+ 
+ .c.o:
+-	$(CC) -c $(CCOPT) $(DEBUG) $(COMPILE_TIME) $<
++	$(CC) -c $(CFLAGS) $(CPPFLAGS) $(CCOPT) $(DEBUG) $(COMPILE_TIME) $<
+ 
+ clean:
+ 	rm -rf hping3 *.o libars.a
+-- 
+2.30.2
+

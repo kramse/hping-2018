@@ -1,0 +1,155 @@
+From deeb9ce45c3c287f924c6e376822058633eb1eda Mon Sep 17 00:00:00 2001
+From: Guillaume Delacour <gui@iroqwa.org>
+Date: Tue, 28 Jun 2022 13:45:41 +0200
+Subject: [PATCH 16/23] Add GNU Hurd support * define PATH_MAX * Don't use
+ AF_LINK features * Read media status with MII and don't include
+ <net/if_media.h>
+
+---
+ getifname.c     | 10 +++++++---
+ interface.c     |  9 ++++++---
+ libpcap_stuff.c |  2 +-
+ script.c        | 14 ++++++++++----
+ 4 files changed, 24 insertions(+), 11 deletions(-)
+
+diff --git a/getifname.c b/getifname.c
+index 0e14611..77ff7d2 100644
+--- a/getifname.c
++++ b/getifname.c
+@@ -19,7 +19,8 @@
+ #include <stdlib.h>
+ 
+ #if defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__NetBSD__) || \
+-    defined(__bsdi__) || defined(__APPLE__)
++    defined(__bsdi__) || defined(__APPLE__) || defined(__FreeBSD_kernel__) || \
++    defined(__GNU__)
+ #include <ifaddrs.h>
+ #include <net/route.h>
+ #endif /* defined(__*BSD__) */
+@@ -29,7 +30,7 @@
+ 
+ #if !defined(__FreeBSD__) && !defined(__OpenBSD__) && !defined(__NetBSD__) && \
+     !defined(__linux__) && !defined(__sun__) && !defined(__bsdi__) && \
+-    !defined(__APPLE__) && !defined(__FreeBSD_kernel__)
++	!defined(__APPLE__) && !defined(__FreeBSD_kernel__) && !defined(__GNU__)
+ #error Sorry, interface code not implemented.
+ #endif
+ 
+@@ -39,7 +40,7 @@
+ #include <net/if_dl.h>
+ #endif
+ 
+-#if (defined OSTYPE_LINUX) || (defined __sun__)
++#if (defined OSTYPE_LINUX) || (defined __sun__) || defined(__GNU__)
+ int get_if_name(void)
+ {
+ 	int fd;
+@@ -242,6 +243,8 @@ int get_if_name(void)
+ 			continue;
+ 		}
+ 
++/* GNU Hurd doesn't have AF_LINK support */
++#ifdef AF_LINK
+ 		if (ifa->ifa_addr->sa_family == AF_LINK) {
+ 			if (opt_debug)
+ 				printf("DEBUG: AF_LINK ");
+@@ -272,6 +275,7 @@ int get_if_name(void)
+ #endif /* __NetBSD__ */
+ 			continue;
+ 		}
++#endif /* AF_LINK */
+ 
+ 		if (ifa->ifa_addr->sa_family == AF_INET6) {
+ 			if (opt_debug)
+diff --git a/interface.c b/interface.c
+index e7a5610..2e8b57b 100644
+--- a/interface.c
++++ b/interface.c
+@@ -28,16 +28,19 @@
+ #include <unistd.h>		/* close */
+ 
+ #if defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__NetBSD__) || \
+-	defined(__bsdi__) || defined(__APPLE__) || defined(__FreeBSD_kernel__)
++    defined(__bsdi__) || defined(__APPLE__) || defined(__FreeBSD_kernel__) || \
++    defined(__GNU__)
+ #include <stdlib.h>
+ #include <ifaddrs.h>
+ #include <net/route.h>
++#if !defined(__GNU__)
+ #include <net/if_media.h>
++#endif
+ #endif /* defined(__*BSD__) */
+ 
+ #if !defined(__FreeBSD__) && !defined(__OpenBSD__) && !defined(__NetBSD__) && \
+     !defined(__linux__) && !defined(__sun__) && !defined(__bsdi__) && \
+-	!defined(__APPLE__) && !defined(__FreeBSD_kernel__)
++    !defined(__APPLE__) && !defined(__FreeBSD_kernel__) && !defined(__GNU__)
+ #error Sorry, interface code not implemented.
+ #endif
+ 
+@@ -61,7 +64,7 @@
+  * the interfaces.
+  *
+  * On error -1 is returned, and errno set. */
+-#if (defined OSTYPE_LINUX) || (defined __sun__)
++#if (defined OSTYPE_LINUX) || (defined __sun__) || defined(__GNU__)
+ int hping_get_interfaces(struct hpingif *hif, int ilen)
+ {
+ 	int fd, found = 0, i;
+diff --git a/libpcap_stuff.c b/libpcap_stuff.c
+index aee24e3..57e85ec 100644
+--- a/libpcap_stuff.c
++++ b/libpcap_stuff.c
+@@ -35,7 +35,7 @@ int open_pcap()
+ 		return -1;
+ 	}
+ #if (!defined OSTYPE_LINUX) && (!defined __sun__) && \
+-	(!defined OSTYPE_GNUKFREEBSD)
++	(!defined OSTYPE_GNUKFREEBSD) && (!defined OSTYPE_GNU)
+ 	/* Return the packets to userspace as fast as possible */
+ 	if (ioctl(pcap_fileno(pcapfp), BIOCIMMEDIATE, &on) == -1)
+ 		perror("[open_pcap] ioctl(... BIOCIMMEDIATE ...)");
+diff --git a/script.c b/script.c
+index 3e09aa8..3a46aa1 100644
+--- a/script.c
++++ b/script.c
+@@ -32,6 +32,11 @@
+ #include "apdutils.h"
+ #include "sbignum.h"
+ 
++/* for systems that don't have PATH_MAX defined (GNU Hurd) */
++#ifndef PATH_MAX
++#define PATH_MAX 4096
++#endif
++
+ #define HPING_IF_MAX	8
+ 
+ /* ----------------------- hping recv handlers code ------------------------- */
+@@ -89,7 +94,7 @@ static struct recv_handler *HpingRecvGetHandler(struct recv_handler *ra, int len
+ 	if (ra[i].rh_pcapfp == NULL)
+ 		return NULL;
+ 	#if (!defined OSTYPE_LINUX) && (!defined __sun__) && \
+-		(!defined OSTYPE_GNUKFREEBSD)
++		(!defined OSTYPE_GNUKFREEBSD) && (!defined OSTYPE_GNU)
+ 	/* Return the packets to userspace as fast as possible */
+ 	if (ioctl(pcap_fileno(ra[i].rh_pcapfp), BIOCIMMEDIATE, &on) == -1) {
+ 		/* XXX non-critical error */
+@@ -1342,11 +1347,12 @@ static int HpingTcl_AppInit(Tcl_Interp *interp)
+ 	{
+ 		char *home = getenv("HOME");
+ 		if (home) {
+-			char rcfile[PATH_MAX];
+-			snprintf(rcfile, PATH_MAX, "%s/.hpingrc", home);
+-			rcfile[PATH_MAX-1] = '\0';
++			char *rcfile = NULL;
++			if(asprintf(&rcfile, "%s/.hpingrc", home) <0)
++				return TCL_ERROR;
+ 			Tcl_EvalFile(interp, rcfile);
+ 			Tcl_ResetResult(interp);
++			free(rcfile);
+ 		}
+ 	}
+ 	return TCL_OK;
+-- 
+2.30.2
+

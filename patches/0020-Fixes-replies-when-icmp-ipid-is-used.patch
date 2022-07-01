@@ -1,0 +1,26 @@
+From 14bc9973429896ee809a8fd1847d2a9d39892804 Mon Sep 17 00:00:00 2001
+From: David Eisner <deisner@gmail.com>
+Date: Tue, 28 Jun 2022 13:49:20 +0200
+Subject: [PATCH 20/23] Fixes replies when icmp-ipid is used
+
+---
+ waitpacket.c | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/waitpacket.c b/waitpacket.c
+index 7e3ac96..343aaf4 100644
+--- a/waitpacket.c
++++ b/waitpacket.c
+@@ -244,7 +244,8 @@ int recv_icmp(void *packet, size_t size)
+ 	if ((icmp.type == ICMP_ECHOREPLY  ||
+ 	     icmp.type == ICMP_TIMESTAMPREPLY ||
+ 	     icmp.type == ICMP_ADDRESSREPLY) &&
+-		icmp.un.echo.id == (getpid() & 0xffff))
++		icmp.un.echo.id == ((icmp_ip_id == DEFAULT_ICMP_IP_ID) ?
++			getpid() & 0xffff : icmp_ip_id) )
+ 	{
+ 		int icmp_seq = icmp.un.echo.sequence;
+ 		int status;
+-- 
+2.30.2
+

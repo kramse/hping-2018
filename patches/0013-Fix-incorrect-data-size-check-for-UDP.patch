@@ -1,0 +1,31 @@
+From 98efba98e9b5d99ed1a60926c9a7a681c35212d5 Mon Sep 17 00:00:00 2001
+From: Luca Bigliardi <shammash@artha.org>
+Date: Tue, 28 Jun 2022 13:03:40 +0200
+Subject: [PATCH 13/23] Fix incorrect data size check for UDP.
+
+---
+ parseoptions.c | 7 +++++--
+ 1 file changed, 5 insertions(+), 2 deletions(-)
+
+diff --git a/parseoptions.c b/parseoptions.c
+index 8ae2e27..598c7d8 100644
+--- a/parseoptions.c
++++ b/parseoptions.c
+@@ -606,9 +606,12 @@ int parse_options(int argc, char **argv)
+ 	if (opt_numeric == TRUE) opt_gethost = FALSE;
+ 
+ 	/* some error condition */
+-	if (data_size+IPHDR_SIZE+TCPHDR_SIZE > 65535) {
++	if (data_size+IPHDR_SIZE+
++	    (opt_udpmode?UDPHDR_SIZE:TCPHDR_SIZE) > 65535) {
+ 		printf("Option error: sorry, data size must be <= %lu\n",
+-			(unsigned long)(65535-IPHDR_SIZE+TCPHDR_SIZE));
++			(unsigned long)(65535-(IPHDR_SIZE+
++					(opt_udpmode?UDPHDR_SIZE:TCPHDR_SIZE)))
++				       );
+ 		exit(1);
+ 	}
+ 	else if (count <= 0 && count != -1) {
+-- 
+2.30.2
+

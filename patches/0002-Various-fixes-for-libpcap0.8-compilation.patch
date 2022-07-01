@@ -1,0 +1,51 @@
+From 719600b2aeae79414613c1e2be2965138afb0a5e Mon Sep 17 00:00:00 2001
+From: Romain Francoise <rfrancoise@debian.org>
+Date: Tue, 28 Jun 2022 12:46:53 +0200
+Subject: [PATCH 02/23] Various fixes for libpcap0.8 compilation.
+
+---
+ configure       | 2 +-
+ libpcap_stuff.c | 1 -
+ script.c        | 1 -
+ 3 files changed, 1 insertion(+), 3 deletions(-)
+
+diff --git a/configure b/configure
+index dab04ab..3b2c2d8 100755
+--- a/configure
++++ b/configure
+@@ -106,7 +106,7 @@ fi
+ # configurable stuff
+ #
+ PCAP="PCAP=-lpcap"
+-PCAP_INCLUDE=""
++PCAP_INCLUDE="-I/usr/include/pcap"
+ 
+ for ARG in $*; do
+ 	case "$ARG" in
+diff --git a/libpcap_stuff.c b/libpcap_stuff.c
+index 26f9993..07ea1e6 100644
+--- a/libpcap_stuff.c
++++ b/libpcap_stuff.c
+@@ -16,7 +16,6 @@
+ #include <string.h>
+ #include <stdlib.h>
+ #include <sys/ioctl.h>
+-#include <net/bpf.h>
+ #include <pcap.h>
+ 
+ #include "globals.h"
+diff --git a/script.c b/script.c
+index 124370c..b2a328b 100644
+--- a/script.c
++++ b/script.c
+@@ -23,7 +23,6 @@
+ #include <sched.h>
+ 
+ #include <sys/ioctl.h>
+-#include <net/bpf.h>
+ #include <pcap.h>
+ 
+ #include "release.h"
+-- 
+2.30.2
+

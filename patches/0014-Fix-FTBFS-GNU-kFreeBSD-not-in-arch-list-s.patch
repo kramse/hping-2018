@@ -1,0 +1,155 @@
+From 63da06ce5e48706e1af31848f372b922fb16d32b Mon Sep 17 00:00:00 2001
+From: Guillaume Delacour <gui@iroqwa.org>
+Date: Tue, 28 Jun 2022 13:11:44 +0200
+Subject: [PATCH 14/23] Fix FTBFS: GNU/kFreeBSD not in arch list(s)
+
+---
+ ars.c           | 3 ++-
+ configure       | 7 +++++++
+ getifname.c     | 4 ++--
+ interface.c     | 6 +++---
+ libpcap_stuff.c | 3 ++-
+ script.c        | 6 ++++--
+ sendip.c        | 3 ++-
+ 7 files changed, 22 insertions(+), 10 deletions(-)
+
+diff --git a/ars.c b/ars.c
+index a16a2f5..a3e23e1 100644
+--- a/ars.c
++++ b/ars.c
+@@ -914,7 +914,8 @@ int ars_bsd_fix(struct ars_packet *pkt, unsigned char *packet, size_t size)
+ 		return -ARS_INVALID;
+ 	}
+ 	ip = (struct ars_iphdr*) packet;
+-#if defined OSTYPE_DARWIN || defined OSTYPE_FREEBSD || defined OSTYPE_NETBSD || defined OSTYPE_BSDI
++#if defined OSTYPE_DARWIN || defined OSTYPE_FREEBSD || defined OSTYPE_NETBSD || defined OSTYPE_BSDI || \
++	defined OSTYPE_GNUKFREEBSD
+ 	ip->tot_len = ntohs(ip->tot_len);
+ 	ip->frag_off = ntohs(ip->frag_off);
+ #endif
+diff --git a/configure b/configure
+index e136381..5f4d335 100755
+--- a/configure
++++ b/configure
+@@ -48,6 +48,13 @@ if [  $CONFIGOSTYPE = "BSD/OS" ]; then
+ 	CONFIGOSTYPE=BSDI
+ fi
+ 
++# for GNU/kFreeBSD, change GNU/KFREEBSD to GNUKFREEBSD, to
++# not including '/'
++if [ $CONFIGOSTYPE = "GNU/KFREEBSD" ]
++then
++       CONFIGOSTYPE=GNUKFREEBSD
++fi
++
+ case $CONFIGOSTYPE in
+   SUNOS)
+     SOLARISLIB="-lsocket -lresolv -lnsl"
+diff --git a/getifname.c b/getifname.c
+index b79db39..0e14611 100644
+--- a/getifname.c
++++ b/getifname.c
+@@ -29,7 +29,7 @@
+ 
+ #if !defined(__FreeBSD__) && !defined(__OpenBSD__) && !defined(__NetBSD__) && \
+     !defined(__linux__) && !defined(__sun__) && !defined(__bsdi__) && \
+-    !defined(__APPLE__)
++    !defined(__APPLE__) && !defined(__FreeBSD_kernel__)
+ #error Sorry, interface code not implemented.
+ #endif
+ 
+@@ -174,7 +174,7 @@ int get_if_name(void)
+ }
+ 
+ #elif defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__) || \
+-      defined(__bsdi__) || defined(__APPLE__)
++      defined(__bsdi__) || defined(__APPLE__) || defined(__FreeBSD_kernel__)
+ 
+ /* return interface informations :
+    - from the specified (-I) interface
+diff --git a/interface.c b/interface.c
+index 029e68b..e7a5610 100644
+--- a/interface.c
++++ b/interface.c
+@@ -28,7 +28,7 @@
+ #include <unistd.h>		/* close */
+ 
+ #if defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__NetBSD__) || \
+-    defined(__bsdi__) || defined(__APPLE__)
++	defined(__bsdi__) || defined(__APPLE__) || defined(__FreeBSD_kernel__)
+ #include <stdlib.h>
+ #include <ifaddrs.h>
+ #include <net/route.h>
+@@ -37,7 +37,7 @@
+ 
+ #if !defined(__FreeBSD__) && !defined(__OpenBSD__) && !defined(__NetBSD__) && \
+     !defined(__linux__) && !defined(__sun__) && !defined(__bsdi__) && \
+-    !defined(__APPLE__)
++	!defined(__APPLE__) && !defined(__FreeBSD_kernel__)
+ #error Sorry, interface code not implemented.
+ #endif
+ 
+@@ -187,7 +187,7 @@ int hping_get_interfaces(struct hpingif *hif, int ilen)
+ #endif
+ 
+ #if defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__) || \
+-      defined(__bsdi__) || defined(__APPLE__)
++    defined(__bsdi__) || defined(__APPLE__) || defined(__FreeBSD_kernel__)
+ /* I wish getifaddrs() API on linux... -- SS */
+ int hping_get_interfaces(struct hpingif *hif, int ilen)
+ {
+diff --git a/libpcap_stuff.c b/libpcap_stuff.c
+index 07ea1e6..aee24e3 100644
+--- a/libpcap_stuff.c
++++ b/libpcap_stuff.c
+@@ -34,7 +34,8 @@ int open_pcap()
+ 		printf("[open_pcap] pcap_open_live: %s\n", errbuf);
+ 		return -1;
+ 	}
+-#if (!defined OSTYPE_LINUX) && (!defined __sun__)
++#if (!defined OSTYPE_LINUX) && (!defined __sun__) && \
++	(!defined OSTYPE_GNUKFREEBSD)
+ 	/* Return the packets to userspace as fast as possible */
+ 	if (ioctl(pcap_fileno(pcapfp), BIOCIMMEDIATE, &on) == -1)
+ 		perror("[open_pcap] ioctl(... BIOCIMMEDIATE ...)");
+diff --git a/script.c b/script.c
+index b2a328b..3e09aa8 100644
+--- a/script.c
++++ b/script.c
+@@ -66,7 +66,8 @@ static void HpingRecvCloseHandler(struct recv_handler *ra)
+ static struct recv_handler *HpingRecvGetHandler(struct recv_handler *ra, int len, char *ifname, Tcl_Interp *interp)
+ {
+ 	int i;
+-	#if (!defined OSTYPE_LINUX) && (!defined __sun__)
++	#if (!defined OSTYPE_LINUX) && (!defined __sun__) && \
++		(!defined OSTYPE_GNUKFREEBSD)
+ 	int on = 1;
+ 	#endif
+ 
+@@ -87,7 +88,8 @@ static struct recv_handler *HpingRecvGetHandler(struct recv_handler *ra, int len
+ 	ra[i].rh_pcapfp = pcap_open_live(ifname, 99999, 0, 1, ra[i].rh_pcap_errbuf);
+ 	if (ra[i].rh_pcapfp == NULL)
+ 		return NULL;
+-	#if (!defined OSTYPE_LINUX) && (!defined __sun__)
++	#if (!defined OSTYPE_LINUX) && (!defined __sun__) && \
++		(!defined OSTYPE_GNUKFREEBSD)
+ 	/* Return the packets to userspace as fast as possible */
+ 	if (ioctl(pcap_fileno(ra[i].rh_pcapfp), BIOCIMMEDIATE, &on) == -1) {
+ 		/* XXX non-critical error */
+diff --git a/sendip.c b/sendip.c
+index fd2a0c2..f86b6bd 100644
+--- a/sendip.c
++++ b/sendip.c
+@@ -48,7 +48,8 @@ void send_ip (char* src, char *dst, char *data, unsigned int datalen,
+ 	ip->ihl		= (IPHDR_SIZE + optlen + 3) >> 2;
+ 	ip->tos		= ip_tos;
+ 
+-#if defined OSTYPE_DARWIN || defined OSTYPE_FREEBSD || defined OSTYPE_NETBSD || defined OSTYPE_BSDI
++#if defined OSTYPE_DARWIN || defined OSTYPE_FREEBSD || defined OSTYPE_NETBSD || defined OSTYPE_BSDI || \
++	defined OSTYPE_GNUKFREEBSD
+ /* FreeBSD */
+ /* NetBSD */
+ 	ip->tot_len	= packetsize;
+-- 
+2.30.2
+

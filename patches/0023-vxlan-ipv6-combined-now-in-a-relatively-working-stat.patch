@@ -1,0 +1,364 @@
+From a543b1b6fc991916dfe65e27c77c049dbbd929ad Mon Sep 17 00:00:00 2001
+From: Henrik Kramselund <hlk@kramse.org>
+Date: Wed, 29 Jun 2022 05:37:23 +0200
+Subject: [PATCH 23/23] vxlan + ipv6 combined now in a relatively working state
+
+---
+ globals.h     |   2 +-
+ main.c        |  40 ++++++++++++-----
+ opensockraw.c |  12 +++--
+ sendip.c      | 121 +++++++++++++++++++++++++++++++++-----------------
+ 4 files changed, 118 insertions(+), 57 deletions(-)
+
+diff --git a/globals.h b/globals.h
+index 8b2f882..50da990 100644
+--- a/globals.h
++++ b/globals.h
+@@ -159,7 +159,7 @@ extern struct ether_addr *temp_mac_p;
+ extern char vxdst_mac[6], vxsrc_mac[6];
+ extern uint8_t src_mac[6];
+ extern uint8_t dst_mac[6];
+-extern struct sockaddr_in vxlan_local, vxlan_remote;
++extern struct sockaddr_storage vxlan_local, vxlan_remote;
+ 
+ #include <pcap.h>
+ extern pcap_t *pcapfp;
+diff --git a/main.c b/main.c
+index 43740ac..731b7cd 100644
+--- a/main.c
++++ b/main.c
+@@ -35,6 +35,7 @@
+ #include <pcap.h>
+ 
+ #include "hping2.h"
++#include "globals.h"
+ 
+ /* globals */
+ unsigned int
+@@ -169,7 +170,7 @@ char
+ 
+ struct ifreq ifr;
+ struct sockaddr_ll rawdevice;
+-uint8_t src_mac[6];
++uint8_t src_mac[6]= {0};
+ uint8_t dst_mac[6] = {0xff,0xff,0xff,0xff,0xff,0xff};
+ 
+ unsigned char
+@@ -183,11 +184,9 @@ struct sockaddr_in
+ 	icmp_ip_src,
+ 	icmp_ip_dst,
+ 	icmp_gw,
+-	vxlan_local,
+ 	local,
+-	vxlan_remote,
+ 	remote;
+-
++struct sockaddr_storage vxlan_local, vxlan_remote;
+ struct sockaddr_in6 local6,remote6;
+ 
+ struct itimerval usec_delay;
+@@ -279,6 +278,31 @@ int main(int argc, char **argv)
+ 			ifname, ifstraddr, h_if_mtu);
+ 	}
+ 
++	if (vxlanmode) {
++		// TODOTODO call resolve and resolve6 when inet_pton fails, this whole section should be
++		// refactored:
++		int dst_ok = 0;
++		struct sockaddr_in6 *in6 = (struct sockaddr_in6 *) &vxlan_local;
++		struct sockaddr_in  *in4 = (struct sockaddr_in  *) &vxlan_local;
++		if(inet_pton(AF_INET6, vxsrcaddr, &in6->sin6_addr)) {
++			in6->sin6_family = AF_INET6;
++			in6 = (struct sockaddr_in6 *) &vxlan_remote;
++			dst_ok = inet_pton(AF_INET6, vxdstaddr, &in6->sin6_addr);
++		} else if (inet_pton(AF_INET, vxsrcaddr, &in4->sin_addr)){
++			in4->sin_family = AF_INET;
++			in4 = (struct sockaddr_in4 *) &vxlan_remote;
++			dst_ok = inet_pton(AF_INET, vxdstaddr, &in4->sin_addr);
++		} else {
++			printf("invalid vxsrcaddr %s\n", vxdstaddr);
++			exit(1);
++		}
++		vxlan_remote.ss_family = vxlan_local.ss_family;
++		if (!dst_ok) {
++			printf("invalid vxdstaddr %s\n", vxdstaddr);
++			exit(1);
++		}
++	}
++
+ 
+ 	/* open raw socket */
+ 	sockraw = open_sockraw();
+@@ -317,14 +341,6 @@ int main(int argc, char **argv)
+ 		}
+ 
+ /*	fprintf(stderr, "hping vxlan mess!\n");
+-	if (vxsrcaddr[0] == '\0')
+-		resolve((struct sockaddr*)&vxlan_local, ifstraddr);
+-	else
+-		resolve((struct sockaddr*)&vxlan_local, vxsrcaddr);
+-	if (vxdstaddr[0] == '\0')
+-		resolve((struct sockaddr*)&vxlan_remote, ifstraddr);
+-	else
+-		resolve((struct sockaddr*)&vxlan_remote, vxdstaddr)
+ 
+ 	// ether_aton makes a static buffer
+ 	if (vxdstmac[0] == '\0') {
+diff --git a/opensockraw.c b/opensockraw.c
+index 39154b8..df1e58b 100644
+--- a/opensockraw.c
++++ b/opensockraw.c
+@@ -26,12 +26,18 @@ int open_sockraw()
+ {
+ 	int s;
+ 
+-	if (! opt_inet6mode ) {
+-		s = socket(AF_INET, SOCK_RAW, IPPROTO_RAW);
+-	} else {
++	/* vxlan_remote determines which protocol we will be
++	 * speaking to the kernel: */
++	int use_ipv6 = opt_inet6mode;
++	if (vxlanmode) {
++		use_ipv6 = (vxlan_remote.ss_family == AF_INET6);
++	}
++	if (use_ipv6) {
+ 		// Input from https://blog.apnic.net/2017/10/24/raw-sockets-ipv6/
+ 		// AF_INET6 raw is not completely raw, may mess with packets!
+ 		s = socket (PF_PACKET, SOCK_RAW, htons (ETH_P_ALL));
++	} else {
++		s = socket(AF_INET, SOCK_RAW, IPPROTO_RAW);
+ 	}
+ 
+ 	if (s == -1) {
+diff --git a/sendip.c b/sendip.c
+index 8d79717..99d7b22 100644
+--- a/sendip.c
++++ b/sendip.c
+@@ -18,6 +18,7 @@
+ #include <stdlib.h>
+ #include <unistd.h>
+ #include <assert.h>
++#include <netinet/ether.h>
+ 
+ #if defined(__linux__)
+ #include <linux/if_packet.h> /* struct sockaddr_ll */
+@@ -52,22 +53,18 @@ void send_ip (char* src, char *dst, char *data, unsigned int datalen,
+ 	unsigned char		*packet = NULL;
+ 	int		result;
+ 	struct myip6hdr	*ip6;
+-	struct myudphdr		*udp;
++	struct myudphdr		*udp; /* needed for cksum at the end */
+ 	struct myvxlanhdr		*vxlan;
+ 	unsigned char *packet_buf;
+ 
+-	if (opt_debug) {
+-		printf("[send_ip] This is the data received!\n");
+-		unsigned int i;
+-		for (i=0; i<datalen; i++) {
+-			printf("%.2X ", data[i]&255);
+-		}
+-		printf("\n");
++	int opt_outer_inet6mode = opt_inet6mode;
++	int opt_inner_inet6mode = opt_inet6mode;
++	if (vxlanmode) {
++		/* if you want the encapsulation to use ipv6,
++		 * give --vxlan-src as ipv6*/
++		opt_outer_inet6mode = (AF_INET6 == vxlan_remote.ss_family);
+ 	}
+ 
+-	int opt_inner_inet6mode = 0;
+-	int opt_outer_inet6mode = 0;
+-
+ 	// Allocate space for a packet, or IPv6 ethernet header + packet
+ 	size_t inner_buf_size = optlen + datalen;
+ 	size_t outer_buf_size = 0;
+@@ -115,22 +112,17 @@ void send_ip (char* src, char *dst, char *data, unsigned int datalen,
+ 		/* Destination and Source MAC addresses */
+ 		memcpy(&etherpacket->dest, dst_mac, 6);
+ 		memcpy(&etherpacket->source, src_mac, 6);
+-		/* Next is ethernet type code (ETH_P_IPV6 for IPv6) */
+-		etherpacket->type	= htons(0x86DD);
++		/* Next is ethernet type code, see netinet/ether.h */
++		if (opt_outer_inet6mode) {
++			etherpacket->type	= htons(ETH_P_IPV6); //0x86DD
++		} else {
++			etherpacket->type	= htons(ETH_P_IP); // 0x0800
++		}
+ 
+ 		packet += ETHERHDR_SIZE;
+ 	}
+ 
+ 	if (vxlanmode) {
+-		struct sockaddr *vxlan_local_addr = NULL;
+-		struct sockaddr *vxlan_remote_addr = NULL;
+-		if (opt_outer_inet6mode) {
+-			vxlan_local_addr = (struct sockaddr *)&vxlan_local.sin_addr;
+-			vxlan_remote_addr = (struct sockaddr *)&vxlan_remote.sin_addr;
+-		} else { // inet4
+-			vxlan_local_addr = (struct sockaddr *)&vxlan_local.sin_addr;
+-			vxlan_remote_addr = (struct sockaddr*)&vxlan_remote.sin_addr;
+-		}
+ 		/* build VXLAN ip header */
+ 		int vxip_id = 0;
+ 		if (!opt_fragment) {
+@@ -140,12 +132,17 @@ void send_ip (char* src, char *dst, char *data, unsigned int datalen,
+ 		}
+ 		if (opt_outer_inet6mode) {
+ 			struct myip6hdr *vxip = (struct myip6hdr*) packet;
+-			//vxip->protocol = 17;	/* VXLAN is UDP  */
+-			//vxip->id	= vxip_id;
+-			//vxip->tos	= ip_tos;
++			//vxip->id	= vxip_id; TODO
++			//vxip->tos	= ip_tos; TODO
+ 			vxip->version	= 6;
+-			memcpy(&vxip->saddr, vxlan_local_addr, sizeof(vxip->saddr));
+-			memcpy(&vxip->daddr, vxlan_remote_addr, sizeof(vxip->daddr));
++			vxip->next_hdr	= 17; /* VXLAN is udp */
++			memcpy(&vxip->saddr, &((struct sockaddr_in6*)&vxlan_local
++				    )->sin6_addr, sizeof(vxip->saddr));
++			memcpy(&vxip->daddr, &((struct sockaddr_in6*)&vxlan_remote
++				    )->sin6_addr, sizeof(vxip->daddr));
++			vxip->hop_limit	=64;
++			vxip->payload_len	= fix_tot_len(UDPHDR_SIZE
++			    + VXLANHDR_SIZE + ETHERHDR_SIZE + inner_buf_size);
+ 			//vxip->ttl		= src_ttl;
+ 			packet += IP6HDR_SIZE;
+ 		} else {
+@@ -156,8 +153,10 @@ void send_ip (char* src, char *dst, char *data, unsigned int datalen,
+ 			vxip->tos		= ip_tos;
+ 			vxip->version	= 4;
+ 			vxip->ihl		= (IPHDR_SIZE + 0 /*optlen*/ + 3) >> 2;
+-			memcpy(&vxip->saddr, vxlan_local_addr, sizeof(vxip->saddr));
+-			memcpy(&vxip->daddr, vxlan_remote_addr, sizeof(vxip->daddr));
++			memcpy(&vxip->saddr, &((struct sockaddr_in*)&vxlan_local
++				    )->sin_addr, sizeof(vxip->saddr));
++			memcpy(&vxip->daddr, &((struct sockaddr_in*)&vxlan_remote
++				    )->sin_addr, sizeof(vxip->daddr));
+ 			vxip->ttl		= src_ttl;
+ 			vxip->tot_len	= fix_tot_len(UDPHDR_SIZE+VXLANHDR_SIZE+ETHERHDR_SIZE+inner_buf_size);
+ 			packet += IPHDR_SIZE;
+@@ -169,8 +168,8 @@ void send_ip (char* src, char *dst, char *data, unsigned int datalen,
+ 		/* udp header */
+ 		udp->uh_dport	= htons(vxdst_port);
+ 		udp->uh_sport	= htons(vxsrc_port);
+-		udp->uh_ulen	= htons(VXLANHDR_SIZE + ETHERHDR_SIZE + inner_buf_size);
+-		//		udp->uh_sum = 0 ;  // Already zeroed, so skip
++		udp->uh_ulen	= htons(UDPHDR_SIZE + VXLANHDR_SIZE + ETHERHDR_SIZE + inner_buf_size);
++		//	      udp->uh_sum = 0 ;  // Already zeroed, so skip
+ 		packet += UDPHDR_SIZE;
+ 
+ 		vxlan = (struct myvxlanhdr*) packet;
+@@ -178,7 +177,6 @@ void send_ip (char* src, char *dst, char *data, unsigned int datalen,
+ 		vxlan->vni_high	= vxvni / 65536;
+ 		vxlan->vni_med	= (vxvni - vxlan->vni_high * 65536 ) / 256;
+ 		vxlan->vni_low	= vxvni - vxlan->vni_med * 256 - vxlan->vni_high * 65536;
+-//		vxlan->vni_low	= vxvni;
+ 		packet += VXLANHDR_SIZE;
+ 
+ 		// Only IPv4 right now, type 0x0800, IPv6 would bx 0x86DD
+@@ -186,9 +184,9 @@ void send_ip (char* src, char *dst, char *data, unsigned int datalen,
+ 		memcpy(&etherpacket->dest, vxdst_mac, 6);
+ 		memcpy(&etherpacket->source, vxsrc_mac, 6);
+ 		if (opt_inner_inet6mode) {
+-			etherpacket->type	= htons(0x08DD);
++			etherpacket->type	= htons(ETH_P_IPV6);
+ 		} else {
+-			etherpacket->type	= htons(0x0800);
++			etherpacket->type	= htons(ETH_P_IP);
+ 		}
+ 		packet += ETHERHDR_SIZE; /* now either ipv4 or ipv6 inner payload */
+ 	}
+@@ -220,7 +218,7 @@ void send_ip (char* src, char *dst, char *data, unsigned int datalen,
+ 	ip->ihl		= (IPHDR_SIZE + optlen + 3) >> 2;
+ 	ip->tos		= ip_tos;
+ 
+-	ip->tot_len	= fix_tot_len(inner_buf_size - IPHDR_SIZE-optlen);
++	ip->tot_len	= fix_tot_len(IPHDR_SIZE + optlen + datalen);
+ 
+ 	if (!opt_fragment)
+ 	{
+@@ -254,11 +252,9 @@ void send_ip (char* src, char *dst, char *data, unsigned int datalen,
+ 	else if	(opt_icmpmode)	ip->protocol = 1;	/* icmp */
+ 	else if (opt_udpmode)	ip->protocol = 17;	/* udp  */
+ 	else			ip->protocol = 6;	/* tcp  */
+-	ip->check	= 0; /* always computed by the kernel */
++	ip->check	= cksum(ip, IPHDR_SIZE);
+ 	packet += IPHDR_SIZE;
+ 
+-	/* copies options */
+-
+ 	} else // Lets make an IPv6 packet!
+ 	{
+ 		/* IPv6 header */
+@@ -277,7 +273,7 @@ void send_ip (char* src, char *dst, char *data, unsigned int datalen,
+ 
+ 		/* Hop limit (8 bits): default to maximum value */
+ 		ip6->hop_limit = 64;
+-		ip6->payload_len	= htons(datalen);
++		ip6->payload_len	= fix_tot_len(optlen + datalen);
+ 		/* copy src and dst address */
+ 		memcpy(&ip6->saddr, src, sizeof(ip6->saddr));
+ 		memcpy(&ip6->daddr, dst, sizeof(ip6->daddr));
+@@ -295,14 +291,57 @@ void send_ip (char* src, char *dst, char *data, unsigned int datalen,
+ 	packet += datalen;
+ 
+ 	assert(packet == packet_buf + outer_buf_size + inner_buf_size);
++
++	/* fixup UDP checksum of the VXLAN packet */
++	if (vxlanmode) {
++		// pseudo: saddr, daddr, zero, protocol, length
++		uint32_t sum = 0;
++		__u16 *p = NULL;
++		__u16 *p_end = NULL;
++		if (opt_outer_inet6mode) {
++			struct pseudohdr6 ph = {0};
++			memcpy(&ph.saddr, &((struct sockaddr_in6*)&vxlan_local
++				    )->sin6_addr, sizeof(ph.saddr));
++			memcpy(&ph.daddr, &((struct sockaddr_in6*)&vxlan_remote
++				    )->sin6_addr, sizeof(ph.daddr));
++			ph.protocol = 17; /* UDP */
++			ph.length = htons(outer_buf_size + inner_buf_size - IP6HDR_SIZE - ETHERHDR_SIZE);
++			p = (__u16 *)&ph;
++			p_end = (__u16 *)((__u8 *)&ph+sizeof(ph));
++		} else {
++			struct pseudohdr ph = {0};
++			memcpy(&ph.saddr, &((struct sockaddr_in*)&vxlan_local
++				    )->sin_addr, sizeof(ph.saddr));
++			memcpy(&ph.daddr, &((struct sockaddr_in*)&vxlan_remote
++				    )->sin_addr, sizeof(ph.daddr));
++			ph.protocol = 17; /* UDP */
++			ph.length = htons(outer_buf_size + inner_buf_size - IPHDR_SIZE);
++			p = (__u16 *)&ph;
++			p_end = (__u16 *)((__u8 *)&ph+sizeof(ph));
++		}
++		while(p != p_end) sum += htons(*p++);
++		p = (__u16 *)udp;
++		unsigned int p_last = UDPHDR_SIZE + VXLANHDR_SIZE + ETHERHDR_SIZE + inner_buf_size;
++		p_end = (__u16 *)((__u8 *)udp+(p_last&~1U));
++		while(p != p_end) sum += htons(*p++);
++		if (p_last & 1U) sum += htons(*(((__u8*)p)-1));
++		sum = (sum >> 16) + (sum & 0xffff);
++		sum += (sum >> 16);
++		udp->uh_sum = htons(~sum);
++	}
++
+ 	packet = NULL;
+ 
+ 	// Sending:
+ 	struct sockaddr *destination = NULL;
+ 	size_t destination_size = 0;
+ 	if (! opt_outer_inet6mode) {
+-		destination = (struct sockaddr *)&remote;
+-		destination_size = sizeof(remote);
++		if (vxlanmode) {
++			destination = (struct sockaddr *)&vxlan_remote;
++		} else {
++			destination = (struct sockaddr *)&remote;
++		}
++		destination_size = sizeof(struct sockaddr_in);
+ 	} else {
+ 		destination = (struct sockaddr *) &rawdevice;
+ 		destination_size = sizeof(rawdevice);
+-- 
+2.30.2
+
