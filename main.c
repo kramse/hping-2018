@@ -52,10 +52,6 @@ unsigned int
 
 volatile struct delaytable_element delaytable[TABLESIZE];
 
-/* Moved from globals.h due to compiler errors: multiple definition of */
-uint8_t src_mac[6];
-uint8_t dst_mac[6];
-
 unsigned short int
 	data_size = 0;
 
