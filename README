@@ -1,3 +1,37 @@
+Addendum by Henrik Kramselund @kramse
+
+2022 - post-troopers22
+
+A friend has gone through my repository and additional patches found on the internet.
+
+Your recommended path to an IPv6 AND VXLAN enabled hping3 would thus be.
+
+0) git clone the original
+https://github.com/antirez/hping.git
+
+1) take the patches directory from THIS repository,
+either copy the dir or the file kramse-hping3-2022.tar.gz
+
+2) Run configure and make
+./configure --no-tcl
+make
+
+3) Run hping3 with IPv6 packets:
+
+```
+sudo ./hping3 --inet6 -I eth0 -D -c 1 -p 80 -a 2a03:d380::1234 www.kramse.org
+```
+
+4)
+```
+sudo ./hping3 -S -p 80 --vxlan-source-addr 172.29.0.134 --vxlan-dest-addr 172.29.0.129
+--vxlan-source-port 4789 --vxlan-dest-port 4789 --vxlan-vni 128512 172.29.0.128
+--spoof 172.29.0.135 --vxlan-source-mac 55:55:55:55:55:55 --vxlan-dest-mac dd:00:55:ff:ff:ff
+```
+(one line)
+
+--- ORIGINAL below ---
+
 hping3 README file
 antirez@invece.org
 
@@ -61,7 +95,7 @@ DOWNLOAD
 	How to get the hping3 source code from the anonymous CVS server
 	----------------------------------------------------------------
 
-	$ cvs -d :pserver:anonymous@cvs.hping2.sourceforge.net:/cvsroot/hping2 login   
+	$ cvs -d :pserver:anonymous@cvs.hping2.sourceforge.net:/cvsroot/hping2 login
 
 	CVS will ask for the password, just press enter, no password is required
 
