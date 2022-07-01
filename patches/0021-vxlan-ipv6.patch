@@ -1,0 +1,1581 @@
+From 02f3cf40de04d39d8dedf15e9b9f017ff98eb331 Mon Sep 17 00:00:00 2001
+From: Henrik Kramselund <hlk@kramse.org>
+Date: Tue, 28 Jun 2022 16:08:51 +0200
+Subject: [PATCH 21/23] vxlan + ipv6
+
+---
+ INSTALL          |   4 +-
+ Makefile.in      |   2 +-
+ docs/hping3.8    |  60 +++++++++++-
+ getifname.c      |  48 ++++++++--
+ globals.h        |  22 ++++-
+ hping2.h         |  86 ++++++++++++++++-
+ main.c           | 128 ++++++++++++++++++++++----
+ opensockraw.c    |  16 +++-
+ parseoptions.c   |  47 +++++++++-
+ resolve.c        |  50 ++++++++++
+ run.sh           |  12 +++
+ send.c           |   1 +
+ sendinet6.c      |  25 +++++
+ sendip.c         | 234 ++++++++++++++++++++++++++++++++++++++++-------
+ sendip_handler.c |  38 +++++---
+ sendtcp.c        |  68 ++++++++++----
+ sendudp.c        |  41 +++++++--
+ usage.c          |  12 +++
+ 18 files changed, 788 insertions(+), 106 deletions(-)
+ create mode 100644 run.sh
+ create mode 100644 sendinet6.c
+
+diff --git a/INSTALL b/INSTALL
+index fead11c..cd35bc6 100644
+--- a/INSTALL
++++ b/INSTALL
+@@ -16,13 +16,15 @@ Linux
+ -----
+ 
+ please, follows this steps:
+-
++$ sudo apt install libpcap-dev tcl-dev
+ $ ./configure (first try ./configure --help)
+ $ vi Makefile (optional)
+ $ make
+ $ su
+ # make install
+ 
++Kali Linux 2018, do the following
++
+ FreeBSD, OpenBSD, NetBSD
+ ------------------------
+ 
+diff --git a/Makefile.in b/Makefile.in
+index cc2a206..22ad76d 100644
+--- a/Makefile.in
++++ b/Makefile.in
+@@ -32,7 +32,7 @@ OBJ=	main.o getifname.o getlhs.o \
+ 	relid.o sendip_handler.o \
+ 	libpcap_stuff.o memlockall.o memunlockall.o \
+ 	memlock.o memunlock.o ip_opt_build.o \
+-	display_ipopt.o sendrawip.o signal.o send.o \
++	display_ipopt.o sendrawip.o sendinet6.o signal.o send.o \
+ 	strlcpy.o arsglue.o random.o scan.o \
+ 	hstring.o script.o interface.o \
+ 	adbuf.o hex.o apdutils.o sbignum.o \
+diff --git a/docs/hping3.8 b/docs/hping3.8
+index ee53c10..7203c91 100644
+--- a/docs/hping3.8
++++ b/docs/hping3.8
+@@ -113,6 +113,31 @@ hping3 \- send (almost) arbitrary TCP/IP packets to network hosts
+ .B \-\-rand-source
+ ] [
+ .B \-\-beep
++] [
++.B \-\-vxlan-source-addr
++.I outer source IP
++] [
++.B \-\-vxlan-dest-addr
++.I outer destination IP
++] [
++.B \-\-vxlan-source-port
++.I source port
++] [
++.B \-\-vxlan-dest-port VXLAN destination port
++.I destination port
++] [
++.B \-\-vxlan-vni VXLAN Network Identifier 24-bit integer
++.I vni
++] [
++.B \-\-vxlan-source-mac
++.I mac
++] [
++.B \-\-vxlan-dest-mac
++.I mac
++] [
++.B \-\-vxlan-rand-source-mac
++] [
++.B \-\-vxlan-rand-dest-mac
+ ]
+ hostname
+ .br
+@@ -444,6 +469,39 @@ Alias for \-\-icmptype 13 (to send ICMP timestamp requests).
+ .TP
+ .I --icmp-addr
+ Alias for \-\-icmptype 17 (to send ICMP address mask requests).
++.TP
++
++.SH VXLAN RELATED OPTIONS
++.TP
++This version of hping3 can use VXLAN headers to encapsulate traffic. You typically need to set the right destination and source addresses, and possibly the source and destination ports. Note: it is expected this is a one way, so no responses expected. Purely VXLAN injection into a network.
++.TP
++.I [ .B \-\-vxlan-source-addr
++Set VXLAN source address, also called Virtual Tunnel End Points VTEP or VXLAN gateways. Would in a real VXLAN network be the sender which provides the encapsulating, and routing.
++.TP
++.I [ .B \-\-vxlan-dest-addr
++Set VXLAN destination address, also called Virtual Tunnel End Points VTEP or VXLAN gateways. Provides the de-encapsulating, and forwarding.
++.TP
++.I [ .B \-\-vxlan-source-port
++Set VXLAN source port, default to 4789. RFC 7384 use 4789 Linux kernel 8472
++.TP
++.I [ .B \-\-vxlan-dest-port
++Set VXLAN destination port, default to 4789. RFC 7384 use 4789 Linux kernel 8472.
++.TP
++.I [ .B \-\-vxlan-source-mac
++Set source MAC in the Layer 2 Ethernet frame sent over VXLAN.
++.TP
++.I [ .B \-\-vxlan-dest-mac
++Set destination MAC in the Layer 2 Ethernet frame sent over VXLAN.
++.TP
++.I [ .B \-\-vxlan-rand-source-mac
++This option enables the random source MAC mode.   hping  will  send packets  with  random  source MAC address. It is interesting to use this option to stress various state tables, and other IP/MAC dynamic tables inside VXLAN gateways. Not implemented yet.
++.TP
++.I [ .B \-\-vxlan-rand-dest-mac
++This option enables the random destination MAC mode.   hping  will  send packets  with  random  source MAC address. It is interesting to use this option to stress various state tables, and other IP/MAC dynamic tables inside VXLAN gateways. Not implemented yet.
++.TP
++.I [ .B \-\-vxlan-vni
++Set VXLAN VNI. Often the same as the destination VLAN.
++.TP
+ .SH TCP/UDP RELATED OPTIONS
+ .TP
+ .I -s --baseport source port
+@@ -706,7 +764,7 @@ different:
+ 
+ TTL 0 during transit from ip=192.168.1.1 name=nano.marmoc.net
+ 
+-TTL 0 during reassembly from ip=192.70.106.25 name=UNKNOWN   
++TTL 0 during reassembly from ip=192.70.106.25 name=UNKNOWN
+ 
+ The only difference is the description of the error, it starts with
+ TTL 0.
+diff --git a/getifname.c b/getifname.c
+index 77ff7d2..bc52c24 100644
+--- a/getifname.c
++++ b/getifname.c
+@@ -13,6 +13,10 @@
+ #include <sys/types.h>
+ #include <sys/socket.h>
+ #include <netinet/in.h>		/* struct sockaddr_in */
++#if defined(__linux__)
++#include <linux/if_packet.h> /* struct sockaddr_ll */
++#endif
++
+ #include <arpa/inet.h>		/* inet_ntoa */
+ #include <net/if.h>
+ #include <unistd.h>		/* close */
+@@ -147,6 +151,38 @@ int get_if_name(void)
+ 			sizeof(struct sockaddr_in));
+ 		strlcpy(ifstraddr, inet_ntoa(sa.sin_addr), 1024);
+ 
++    // get if MAC address.
++    if (ioctl(fd, SIOCGIFHWADDR, (char*)&ifr) == -1) {
++      perror("[get_if_name] ioctl(SIOCGIFHWADDR)");
++      continue;
++    }
++    // Copy source MAC address into src_mac
++    memcpy (src_mac, ifr.ifr_hwaddr.sa_data, 6 * sizeof (uint8_t));
++
++    // Debug code
++    // Report source MAC address to stdout.
++    if (opt_verbose) {
++	    printf ("[get_if_name] MAC address for interface %s is ", ifname);
++	    unsigned int i;
++	    for (i=0; i<5; i++) {
++		    printf ("%02x:", src_mac[i]);
++	    }
++	    printf ("%02x\n", src_mac[5]);
++    }
++    // Find interface index from interface name and store index in
++    // struct sockaddr_ll rawdevice, which will be used as an argument of sendto().
++    memset (&rawdevice, 0, sizeof (rawdevice));
++    if ((rawdevice.sll_ifindex = if_nametoindex (ifname)) == 0) {
++      perror ("[get_if_name] if_nametoindex() failed to obtain interface index ");
++      return -1;
++    }
++    if (opt_verbose)
++	    printf ("[get_if_name] Index for interface %s is %i\n", ifname, rawdevice.sll_ifindex);
++    // Fill out sockaddr_ll.
++    rawdevice.sll_family = AF_PACKET;
++    memcpy (rawdevice.sll_addr, src_mac, 6 * sizeof (uint8_t));
++    rawdevice.sll_halen = 6;
++
+ 		/* get if mtu */
+ 		if ( ioctl(fd, SIOCGIFMTU, (char*)&ifr) == -1) {
+ 			perror("Warning: [get_if_name] ioctl(SIOCGIFMTU)");
+@@ -233,7 +269,7 @@ int get_if_name(void)
+ 		if (!(ifa->ifa_flags & IFF_UP)) {       /* if down */
+ 			if (opt_debug)
+ 				printf("DEBUG: DOWN");
+-			continue; 
++			continue;
+ 		}
+ 
+ 		if ((ifa->ifa_flags & IFF_LOOPBACK)&&
+@@ -256,7 +292,7 @@ int get_if_name(void)
+ 			memset( &ifr, 0, sizeof(ifr));
+ 			strlcpy(ifr.ifr_name, ifa->ifa_name, sizeof(ifr.ifr_name));
+ 			if( sizeof(ifr.ifr_addr) >= ifa->ifa_addr->sa_len )
+-				memcpy(&ifr.ifr_addr, ifa->ifa_addr, 
++				memcpy(&ifr.ifr_addr, ifa->ifa_addr,
+ 				       ifa->ifa_addr->sa_len);
+ 			if( (s = socket(PF_INET, SOCK_DGRAM, 0)) < 0) {
+ 				perror("[get_if_name] socket");
+@@ -295,9 +331,9 @@ int get_if_name(void)
+ 			strlcpy(ifstraddr,
+ 			        inet_ntoa(((struct sockaddr_in *)ifa->ifa_addr)->sin_addr),
+ 				          1024);
+-			
++
+ 			if( (saved_ifname[0] == 0) ||
+-                            (!strncmp(ifa->ifa_name, saved_ifname, 24)) || 
++                            (!strncmp(ifa->ifa_name, saved_ifname, 24)) ||
+ 			    (((struct sockaddr_in *)ifa->ifa_addr)->sin_addr.s_addr ==
+ 			       output_if_addr.sin_addr.s_addr) )
+ 				break; /* asked if found or first UP interface */
+@@ -322,7 +358,7 @@ int get_output_if(struct sockaddr_in *dest, struct sockaddr_in *ifip)
+ 	socklen_t len;
+ 	int sock_rt, on=1;
+ 	struct sockaddr_in iface_out;
+- 
++
+ 	memset(&iface_out, 0, sizeof(iface_out));
+ 	sock_rt = socket(AF_INET, SOCK_DGRAM, 0 );
+ 
+@@ -335,7 +371,7 @@ int get_output_if(struct sockaddr_in *dest, struct sockaddr_in *ifip)
+ 		close(sock_rt);
+ 		return -1;
+ 	}
+-  
++
+ 	if (connect(sock_rt, (struct sockaddr*)dest, sizeof(struct sockaddr_in))
+ 	    == -1 ) {
+ 		if (opt_debug)
+diff --git a/globals.h b/globals.h
+index b20b611..8b2f882 100644
+--- a/globals.h
++++ b/globals.h
+@@ -41,6 +41,7 @@ extern unsigned short int
+ extern int	opt_debug,
+ 		sockpacket,
+ 		sockraw,
++		vxlanmode,
+ 		sent_pkt,
+ 		recv_pkt,
+ 		out_of_sequence_pkt,
+@@ -98,6 +99,9 @@ extern int	opt_debug,
+ 		base_dst_port,
+ 		dst_port,
+ 		src_port,
++		vxdst_port,
++		vxsrc_port,
++		vxvni,
+ 		initsport,
+ 		sequence,
+ 		src_winsize,
+@@ -116,7 +120,8 @@ extern int	opt_debug,
+ 		opt_force_icmp,
+ 		icmp_ip_protocol,
+ 		icmp_cksum,
+-		raw_ip_protocol;
++		raw_ip_protocol,
++		opt_inet6mode;
+ 
+ extern unsigned char 	lsr[255],
+ 			ssr[255];
+@@ -134,13 +139,28 @@ extern char	ifname[1024],
+ 		rsign[1024],
+ 		ip_opt[40],
+ 		ip_optlen,
++		vxsrcaddr[1024],
++		vxdstaddr[1024],
++		vxsrcmac[6],
++		vxdstmac[6],
+ 		*opt_scanports;
+ 
++extern struct sockaddr_in6 local6, remote6;
++
+ extern struct sockaddr_in icmp_ip_src, icmp_ip_dst, icmp_gw, local, remote;
++
+ extern struct itimerval usec_delay;
+ extern volatile struct delaytable_element delaytable[TABLESIZE];
+ extern struct hcmphdr *hcmphdr_p;
+ 
++extern struct ifreq ifr;
++extern struct sockaddr_ll rawdevice;
++extern struct ether_addr *temp_mac_p;
++extern char vxdst_mac[6], vxsrc_mac[6];
++extern uint8_t src_mac[6];
++extern uint8_t dst_mac[6];
++extern struct sockaddr_in vxlan_local, vxlan_remote;
++
+ #include <pcap.h>
+ extern pcap_t *pcapfp;
+ extern char errbuf[PCAP_ERRBUF_SIZE];
+diff --git a/hping2.h b/hping2.h
+index b1c02da..03622ce 100644
+--- a/hping2.h
++++ b/hping2.h
+@@ -57,6 +57,17 @@
+ #ifndef IPHDR_SIZE
+ #define IPHDR_SIZE	sizeof(struct myiphdr)
+ #endif
++#ifndef IP6HDR_SIZE
++#define IP6HDR_SIZE	sizeof(struct myip6hdr)
++#endif
++
++#ifndef VXLANHDR_SIZE
++#define VXLANHDR_SIZE	sizeof(struct myvxlanhdr)
++#endif
++
++#ifndef ETHERHDR_SIZE
++#define ETHERHDR_SIZE	sizeof(struct myetherhdr)
++#endif
+ 
+ /* wait X seconds after reached to sent packets in oreder to display replies */
+ #define COUNTREACHED_TIMEOUT 1
+@@ -127,6 +138,8 @@
+ #define DEFAULT_RAW_IP_PROTOCOL		6 /* TCP */
+ #define DEFAULT_TRACEROUTE_TTL		1
+ 
++#define DEFAULT_VX_PORT	    4789	/* default dest. port */
++
+ #define BIND_NONE	0		/* no bind */
+ #define BIND_DPORT	1		/* bind destination port */
+ #define BIND_TTL	2		/* bind ip->ttl */
+@@ -135,7 +148,7 @@
+ #define DEFAULT_CS_WINDOW   300
+ #define DEFAULT_CS_WINDOW_SHIFT 5
+ #define DEFAULT_CS_VECTOR_LEN   10
+-	
++
+ /* fragmentation defines */
+ #define MF ((unsigned short)0x2000)	/* more fragments */
+ #define DF ((unsigned short)0x4000)	/* don't fragment */
+@@ -248,6 +261,9 @@
+ #define ICMP_EXC_TTL            0       /* TTL count exceeded           */
+ #define ICMP_EXC_FRAGTIME       1       /* Fragment Reass time exceeded */
+ 
++#define MAC_ANY "00:00:00:00:00:00"
++#define MAC_BCAST "FF:FF:FF:FF:FF:FF"
++
+ /*
+  * IP header
+  */
+@@ -259,7 +275,7 @@ struct myiphdr {
+         __u8    version:4,
+                 ihl:4;
+ #else
+-#error  "Please, edit Makefile and add -D__(LITTLE|BIG)_ENDIAN_BITFIEND"
++#error  "Please, edit Makefile and add -D__(LITTLE|BIG)_ENDIAN_BITFIELD"
+ #endif
+         __u8    tos;
+         __u16   tot_len;
+@@ -272,6 +288,32 @@ struct myiphdr {
+         __u32   daddr;
+ };
+ 
++/*
++ * IPv6 header
++ * Had problems seeing how flow and traffic class are done, may be reversed
++ */
++struct myip6hdr {
++#if defined(__LITTLE_ENDIAN_BITFIELD)
++        __u8    traffic_class_high:4,
++                version:4;
++        __u8   flow_high:4,
++               traffic_class_low:4;
++#elif defined (__BIG_ENDIAN_BITFIELD)
++        __u8    version:4,
++                traffic_class_low:4;
++        __u8   flow_high:4,
++                traffic_class_high:4;
++#else
++#error  "Please, edit Makefile and add -D__(LITTLE|BIG)_ENDIAN_BITFIEND"
++#endif
++        __u16   flow_low;
++        __u16   payload_len;
++        __u8    next_hdr;
++        __u8    hop_limit;
++        __u8    saddr[16];
++        __u8    daddr[16];
++};
++
+ /*
+  * UDP header
+  */
+@@ -346,6 +388,43 @@ struct pseudohdr
+ 
+ #define PSEUDOHDR_SIZE sizeof(struct pseudohdr)
+ 
++struct pseudohdr6
++{
++  __u8  saddr[16];
++  __u8  daddr[16];
++	__u8  zero;
++	__u8  protocol;
++	__u16 length;
++};
++
++#define PSEUDOHDR6_SIZE sizeof(struct pseudohdr6)
++
++
++/*
++ * VXLAN header
++ */
++struct myvxlanhdr {
++        __u8    flags;
++				__u8    reserved1;
++				__u8    reserved2;
++				__u8    reserved3;
++				__u8    vni_high;
++				__u8    vni_med;
++				__u8    vni_low;
++				__u8    reserved4;
++};
++
++/*
++ * Ethernet header
++ */
++struct myetherhdr {
++				__u8 dest[6];
++				__u8 source[6];
++				__u16    type;
++};
++
++
++
+ /*
+  * hping replies delay table
+  */
+@@ -374,6 +453,7 @@ void	send_packet (int signal_id);
+ void	send_rawip (void);
+ void	send_tcp(void);
+ void	send_udp(void);
++void	send_inet6(void);
+ void	send_icmp(void);
+ void	send_hcmp(__u8 type, __u32 arg);	/* send hcmp packets */
+ void	send_ip (char*, char*, char*, unsigned int, int, unsigned short,
+@@ -386,6 +466,8 @@ void	show_usage(void);
+ void	show_version(void);
+ int	resolve_addr(struct sockaddr * addr, char *hostname); /* resolver */
+ void	resolve(struct sockaddr*, char*);	/* resolver, exit on err. */
++int	resolve_addr6(struct sockaddr * addr, char *hostname); /* resolver */
++void	resolve6(struct sockaddr*, char*);	/* resolver, exit on err. */
+ void	log_icmp_unreach(char*, unsigned short);/* ICMP unreachable logger */
+ void	log_icmp_timeexc(char*, unsigned short);/* ICMP time exceeded logger */
+ time_t	get_usec(void);				/* return current usec */
+diff --git a/main.c b/main.c
+index bdbe165..43740ac 100644
+--- a/main.c
++++ b/main.c
+@@ -21,6 +21,12 @@
+ #include <stdlib.h>
+ #include <sys/socket.h>
+ #include <netinet/in.h>
++#include <net/ethernet.h>
++#include <net/if.h>
++#if defined(__linux__)
++#include <linux/if_ether.h>
++#include <linux/if_packet.h>
++#endif /* defined(__linux__) */
+ #include <arpa/inet.h>
+ #include <signal.h>
+ #include <time.h>
+@@ -47,7 +53,6 @@ unsigned int
+ 	tcp_ack,
+ 	tcp_mss;
+ 
+-
+ unsigned short int
+ 	data_size = 0;
+ 
+@@ -59,6 +64,7 @@ float
+ int
+ 	sockpacket,
+ 	sockraw,
++	vxlanmode = 0,
+ 	sent_pkt = 0,
+ 	recv_pkt = 0,
+ 	out_of_sequence_pkt = 0,
+@@ -117,6 +123,9 @@ int
+ 	base_dst_port	= DEFAULT_DPORT,
+ 	dst_port	= DEFAULT_DPORT,
+ 	src_port,
++	vxdst_port	= DEFAULT_VX_PORT,
++	vxsrc_port	= DEFAULT_VX_PORT,
++	vxvni = 0,
+ 	sequence	= 0,
+ 	initsport	= DEFAULT_INITSPORT,
+ 	src_winsize	= DEFAULT_SRCWINSIZE,
+@@ -135,7 +144,8 @@ int
+ 	icmp_ip_dstport	= DEFAULT_DPORT,
+ 	opt_force_icmp  = FALSE,
+ 	icmp_cksum	= DEFAULT_ICMP_CKSUM,
+-	raw_ip_protocol	= DEFAULT_RAW_IP_PROTOCOL;
++	raw_ip_protocol	= DEFAULT_RAW_IP_PROTOCOL,
++	opt_inet6mode = FALSE;
+ 
+ char
+ 	datafilename	[1024],
+@@ -143,7 +153,12 @@ char
+ 	targetstraddr	[1024],
+ 	ifname		[1024] = {'\0'},
+ 	ifstraddr	[1024],
++	ifstraddr6	[1024],
+ 	spoofaddr	[1024],
++	vxsrcaddr[1024] = {'\0'},
++	vxdstaddr[1024] = {'\0'},
++	vxsrcmac[6]	= {'\0'},
++	vxdstmac[6]	= {'\0'},
+ 	icmp_ip_srcip	[1024],
+ 	icmp_ip_dstip	[1024],
+ 	icmp_gwip	[1024],
+@@ -152,6 +167,11 @@ char
+ 	ip_opt		[40],
+ 	*opt_scanports = "";
+ 
++struct ifreq ifr;
++struct sockaddr_ll rawdevice;
++uint8_t src_mac[6];
++uint8_t dst_mac[6] = {0xff,0xff,0xff,0xff,0xff,0xff};
++
+ unsigned char
+ 	lsr		[255] = {0},
+ 	ssr		[255] = {0};
+@@ -163,15 +183,22 @@ struct sockaddr_in
+ 	icmp_ip_src,
+ 	icmp_ip_dst,
+ 	icmp_gw,
++	vxlan_local,
+ 	local,
++	vxlan_remote,
+ 	remote;
+ 
++struct sockaddr_in6 local6,remote6;
++
+ struct itimerval usec_delay;
+ volatile struct delaytable_element delaytable[TABLESIZE];
+ 
+ struct hcmphdr *hcmphdr_p; /* global pointer used by send_hcmp to transfer
+ 			      hcmp headers to data_handler */
+ 
++struct ether_addr *temp_mac_p;
++char vxdst_mac[6], vxsrc_mac[6];
++
+ pcap_t *pcapfp;
+ char errbuf[PCAP_ERRBUF_SIZE];
+ struct pcap_pkthdr hdr;
+@@ -204,6 +231,13 @@ int main(int argc, char **argv)
+ 		exit(1);
+ 	}
+ 
++	/* IPv6 mode? */
++	if (opt_inet6mode && !opt_quiet) {
++		fprintf(stderr,
++			"hping in IPv6 inet6mode, highly experimental - check output!\n");
++	}
++
++
+ 	/* reverse sign */
+ 	if (opt_sign || opt_listenmode) {
+ 		char *src = sign+strlen(sign)-1; /* last char before '\0' */
+@@ -217,14 +251,21 @@ int main(int argc, char **argv)
+ 	}
+ 
+ 	/* get target address before interface processing */
+-	if ((!opt_listenmode && !opt_safe) && !opt_rand_dest)
+-		resolve((struct sockaddr*)&remote, targetname);
++	if ((!opt_listenmode && !opt_safe) && !opt_rand_dest) {
++		if (!opt_inet6mode) {
++			resolve((struct sockaddr*)&remote, targetname);
++		}
++		else {
++			resolve6((struct sockaddr*)&remote6, targetname);
++		}
++	}
+ 
+ 	if (opt_rand_dest) {
+ 		strlcpy(targetstraddr, targetname, sizeof(targetstraddr));
++	} else if (!opt_inet6mode) {
++		inet_ntop(AF_INET, &remote.sin_addr, targetstraddr, INET_ADDRSTRLEN);
+ 	} else {
+-		strlcpy(targetstraddr, inet_ntoa(remote.sin_addr),
+-			sizeof(targetstraddr));
++		inet_ntop(AF_INET6, &remote6.sin6_addr, targetstraddr, INET6_ADDRSTRLEN);
+ 	}
+ 
+ 	/* get interface's name and address */
+@@ -238,6 +279,7 @@ int main(int argc, char **argv)
+ 			ifname, ifstraddr, h_if_mtu);
+ 	}
+ 
++
+ 	/* open raw socket */
+ 	sockraw = open_sockraw();
+ 	if (sockraw == -1) {
+@@ -245,10 +287,12 @@ int main(int argc, char **argv)
+ 		exit(1);
+ 	}
+ 
+-	/* set SO_BROADCAST option */
+-	socket_broadcast(sockraw);
+-	/* set SO_IPHDRINCL option */
+-	socket_iphdrincl(sockraw);
++	if (! opt_inet6mode) {
++		/* set SO_BROADCAST option */
++		socket_broadcast(sockraw);
++		/* set SO_IPHDRINCL option */
++		socket_iphdrincl(sockraw);
++	}
+ 
+ 	/* open sock packet or libpcap socket */
+ 	if (open_pcap() == -1) {
+@@ -265,7 +309,40 @@ int main(int argc, char **argv)
+ 	if (spoofaddr[0] == '\0')
+ 		resolve((struct sockaddr*)&local, ifstraddr);
+ 	else
+-		resolve((struct sockaddr*)&local, spoofaddr);
++		if (!opt_inet6mode) {
++			resolve((struct sockaddr*)&local, spoofaddr);
++		}
++		else {
++			resolve6((struct sockaddr*)&local6, spoofaddr);
++		}
++
++/*	fprintf(stderr, "hping vxlan mess!\n");
++	if (vxsrcaddr[0] == '\0')
++		resolve((struct sockaddr*)&vxlan_local, ifstraddr);
++	else
++		resolve((struct sockaddr*)&vxlan_local, vxsrcaddr);
++	if (vxdstaddr[0] == '\0')
++		resolve((struct sockaddr*)&vxlan_remote, ifstraddr);
++	else
++		resolve((struct sockaddr*)&vxlan_remote, vxdstaddr)
++
++	// ether_aton makes a static buffer
++	if (vxdstmac[0] == '\0') {
++		temp_mac_p = ether_aton("ff:ff:ff:ff:ff:ff");
++		memcpy(vxdst_mac, temp_mac_p, sizeof(vxsrc_mac));
++	}
++	else {
++		temp_mac_p = ether_aton(vxdstmac);
++		memcpy(vxdst_mac, temp_mac_p, sizeof(vxsrc_mac));
++	}
++	if (vxsrcmac[0] == '\0') {
++		temp_mac_p = ether_aton("f0:0d:f0:0d:f0:0d");
++		memcpy(vxsrc_mac, temp_mac_p, sizeof(vxsrc_mac));
++	}
++	else {
++		temp_mac_p = ether_aton(vxsrcmac);
++		memcpy(vxsrc_mac, temp_mac_p, sizeof(vxsrc_mac));
++	}*/
+ 
+ 	if (icmp_ip_srcip[0] == '\0')
+ 		resolve((struct sockaddr*)&icmp_ip_src, "1.2.3.4");
+@@ -325,16 +402,26 @@ int main(int argc, char **argv)
+ 		/* UNREACHED */
+ 	}
+ 
+-	if (opt_rawipmode) {
+-		strcat(setflags, "raw IP mode");
++	if (opt_inet6mode) {
++		strcat(setflags, "inet6 ");
++		hdr_size = IP6HDR_SIZE;
++	}
++	else {
++		strcat(setflags, "inet ");
+ 		hdr_size = IPHDR_SIZE;
++	}
++
++	if (opt_rawipmode) {
++		strcat(setflags, "raw");
+ 	} else if (opt_icmpmode) {
+-		strcat(setflags, "icmp mode");
+-		hdr_size = IPHDR_SIZE + ICMPHDR_SIZE;
++		strcat(setflags, "icmp");
++		hdr_size += ICMPHDR_SIZE;
+ 	} else if (opt_udpmode) {
+-		strcat(setflags, "udp mode");
+-		hdr_size = IPHDR_SIZE + UDPHDR_SIZE;
++		strcat(setflags, "udp");
++		hdr_size += UDPHDR_SIZE;
+ 	} else {
++		strcat(setflags, "tcp ");
++		size_t before_flags = strlen(setflags);
+ 		if (tcp_th_flags & TH_RST)  strcat(setflags, "R");
+ 		if (tcp_th_flags & TH_SYN)  strcat(setflags, "S");
+ 		if (tcp_th_flags & TH_ACK)  strcat(setflags, "A");
+@@ -343,10 +430,11 @@ int main(int argc, char **argv)
+ 		if (tcp_th_flags & TH_URG)  strcat(setflags, "U");
+ 		if (tcp_th_flags & TH_X)    strcat(setflags, "X");
+ 		if (tcp_th_flags & TH_Y)    strcat(setflags, "Y");
+-		if (setflags[0] == '\0')    strcat(setflags, "NO FLAGS are");
+-		hdr_size = IPHDR_SIZE + TCPHDR_SIZE;
++		if (before_flags == strlen(setflags))
++			strcat(setflags, "NO FLAGS are");
++		hdr_size += TCPHDR_SIZE;
+ 	}
+-	
++
+ 	printf("HPING %s (%s %s): %s set, %d headers + %d data bytes\n",
+ 		targetname,
+ 		ifname,
+diff --git a/opensockraw.c b/opensockraw.c
+index 5bf3b6f..39154b8 100644
+--- a/opensockraw.c
++++ b/opensockraw.c
+@@ -15,11 +15,25 @@
+ #include <sys/socket.h>
+ #include <netinet/in.h> /* IPPROTO_RAW def. */
+ 
++#if defined(__linux__)
++#include <linux/if_ether.h>
++#endif /* defined(__linux__) */
++
++#include "hping2.h"
++#include "globals.h"
++
+ int open_sockraw()
+ {
+ 	int s;
+ 
+-	s = socket(AF_INET, SOCK_RAW, IPPROTO_RAW);
++	if (! opt_inet6mode ) {
++		s = socket(AF_INET, SOCK_RAW, IPPROTO_RAW);
++	} else {
++		// Input from https://blog.apnic.net/2017/10/24/raw-sockets-ipv6/
++		// AF_INET6 raw is not completely raw, may mess with packets!
++		s = socket (PF_PACKET, SOCK_RAW, htons (ETH_P_ALL));
++	}
++
+ 	if (s == -1) {
+ 		perror("[open_sockraw] socket()");
+ 		return -1;
+diff --git a/parseoptions.c b/parseoptions.c
+index 750abea..79071be 100644
+--- a/parseoptions.c
++++ b/parseoptions.c
+@@ -30,12 +30,18 @@ enum {	OPT_COUNT, OPT_INTERVAL, OPT_NUMERIC, OPT_QUIET, OPT_INTERFACE,
+ 	OPT_SETSEQ, OPT_SETACK, OPT_ICMPTYPE, OPT_ICMPCODE, OPT_END,
+ 	OPT_RROUTE, OPT_IPPROTO, OPT_ICMP_IPVER, OPT_ICMP_IPHLEN,
+ 	OPT_ICMP_IPLEN, OPT_ICMP_IPID, OPT_ICMP_IPPROTO, OPT_ICMP_CKSUM,
++	/* VXLAN */
++	OPT_VXSOURCEADDR, OPT_VXDESTADDR, OPT_VXSOURCEPORT, OPT_VXDESTPORT,
++	OPT_VXSOURCEMAC, OPT_VXDESTMAC,
++	OPT_VXVNI,
++	/**/
+ 	OPT_ICMP_TS, OPT_ICMP_ADDR, OPT_TCPEXITCODE, OPT_FAST, OPT_TR_KEEP_TTL,
+ 	OPT_TCP_TIMESTAMP, OPT_TCP_MSS, OPT_TR_STOP, OPT_TR_NO_RTT, OPT_ICMP_HELP,
+ 	OPT_RAND_DEST, OPT_RAND_SOURCE, OPT_LSRR, OPT_SSRR, OPT_ROUTE_HELP,
+ 	OPT_ICMP_IPSRC, OPT_ICMP_IPDST, OPT_ICMP_SRCPORT, OPT_ICMP_DSTPORT,
+ 	OPT_ICMP_GW, OPT_FORCE_ICMP, OPT_APD_SEND, OPT_SCAN, OPT_FASTER,
+ 	OPT_BEEP, OPT_FLOOD, OPT_CLOCK_SKEW, OPT_CS_WINDOW, OPT_CS_WINDOW_SHIFT,
++	OPT_INET6,
+         OPT_CS_VECTOR_LEN };
+ 
+ static struct ago_optlist hping_optlist[] = {
+@@ -104,6 +110,13 @@ static struct ago_optlist hping_optlist[] = {
+ 	{ '\0', "icmp-cksum",	OPT_ICMP_CKSUM,   	AGO_NEEDARG|AGO_EXCEPT0 },
+ 	{ '\0',	"icmp-ts",	OPT_ICMP_TS,		AGO_NOARG },
+ 	{ '\0', "icmp-addr",	OPT_ICMP_ADDR,		AGO_NOARG },
++	{ '\0',	"vxlan-source-addr",	OPT_VXSOURCEADDR,		AGO_NEEDARG|AGO_EXCEPT0 },
++	{ '\0',	"vxlan-dest-addr",	OPT_VXDESTADDR,		AGO_NEEDARG|AGO_EXCEPT0 },
++	{ '\0',	"vxlan-source-port",	OPT_VXSOURCEPORT,		AGO_NEEDARG|AGO_EXCEPT0 },
++	{ '\0',	"vxlan-dest-port",	OPT_VXDESTPORT,		AGO_NEEDARG|AGO_EXCEPT0 },
++	{ '\0',	"vxlan-source-mac",	OPT_VXSOURCEMAC,		AGO_NEEDARG|AGO_EXCEPT0 },
++	{ '\0',	"vxlan-dest-mac",	OPT_VXDESTMAC,		AGO_NEEDARG|AGO_EXCEPT0 },
++	{ '\0',	"vxlan-vni",	OPT_VXVNI,		AGO_NEEDARG|AGO_EXCEPT0 },
+ 	{ '\0', "tcpexitcode",	OPT_TCPEXITCODE,	AGO_NOARG },
+ 	{ '\0',	"fast",		OPT_FAST,		AGO_NOARG|AGO_EXCEPT0 },
+ 	{ '\0',	"faster",	OPT_FASTER,		AGO_NOARG|AGO_EXCEPT0 },
+@@ -130,6 +143,7 @@ static struct ago_optlist hping_optlist[] = {
+ 	{ '\0', "clock-skew-win", OPT_CS_WINDOW,	AGO_NEEDARG},
+ 	{ '\0', "clock-skew-win-shift", OPT_CS_WINDOW_SHIFT,	AGO_NEEDARG},
+ 	{ '\0', "clock-skew-packets-per-sample", OPT_CS_VECTOR_LEN,AGO_NEEDARG},
++	{ '\0',	"inet6",		OPT_INET6,		AGO_NOARG },
+ 	AGO_LIST_TERM
+ };
+ 
+@@ -243,7 +257,7 @@ int parse_options(int argc, char **argv)
+ 				opt_waitinusec = TRUE;
+ 				usec_delay.it_value.tv_sec =
+ 				usec_delay.it_interval.tv_sec = 0;
+-				usec_delay.it_value.tv_usec = 
++				usec_delay.it_value.tv_usec =
+ 				usec_delay.it_interval.tv_usec =
+ 					atol(ago_optarg+1);
+ 			}
+@@ -353,6 +367,28 @@ int parse_options(int argc, char **argv)
+ 			opt_icmpmode = TRUE;
+ 			opt_icmptype = 17;
+ 			break;
++		case OPT_VXSOURCEADDR:
++			strlcpy (vxsrcaddr, ago_optarg, 1024);
++			break;
++		case OPT_VXDESTADDR:
++			strlcpy (vxdstaddr, ago_optarg, 1024);
++			vxlanmode = 1;
++			break;
++		case OPT_VXSOURCEPORT:
++			vxsrc_port = strtol(ago_optarg, NULL, 0);
++			break;
++		case OPT_VXDESTPORT:
++			vxdst_port = strtol(ago_optarg, NULL, 0);
++			break;
++		case OPT_VXSOURCEMAC:
++			strlcpy (vxsrcmac, ago_optarg, 1024);
++			break;
++		case OPT_VXDESTMAC:
++			strlcpy (vxdstmac, ago_optarg, 1024);
++			break;
++		case OPT_VXVNI:
++			vxvni = strtol(ago_optarg, NULL, 0);
++			break;
+ 		case OPT_UDP:
+ 			opt_udpmode = TRUE;
+ 			break;
+@@ -506,7 +542,7 @@ int parse_options(int argc, char **argv)
+ 			opt_waitinusec = TRUE;
+ 			usec_delay.it_value.tv_sec =
+ 			usec_delay.it_interval.tv_sec = 0;
+-			usec_delay.it_value.tv_usec = 
++			usec_delay.it_value.tv_usec =
+ 			usec_delay.it_interval.tv_usec = 100000;
+ 			break;
+ 		case OPT_FASTER:
+@@ -514,7 +550,7 @@ int parse_options(int argc, char **argv)
+ 			opt_waitinusec = TRUE;
+ 			usec_delay.it_value.tv_sec =
+ 			usec_delay.it_interval.tv_sec = 0;
+-			usec_delay.it_value.tv_usec = 
++			usec_delay.it_value.tv_usec =
+ 			usec_delay.it_interval.tv_usec = 1;
+ 		case OPT_TR_KEEP_TTL:
+ 			opt_tr_keep_ttl = TRUE;
+@@ -559,6 +595,9 @@ int parse_options(int argc, char **argv)
+ 		case OPT_BEEP:
+ 			opt_beep = TRUE;
+ 			break;
++		case OPT_INET6:
++			opt_inet6mode = TRUE;
++			break;
+ 		case OPT_FLOOD:
+ 			opt_flood = TRUE;
+ 			break;
+@@ -696,7 +735,7 @@ int parse_options(int argc, char **argv)
+ 		opt_waitinusec = TRUE;
+ 		usec_delay.it_value.tv_sec =
+ 		usec_delay.it_interval.tv_sec = 0;
+-		usec_delay.it_value.tv_usec = 
++		usec_delay.it_value.tv_usec =
+ 		usec_delay.it_interval.tv_usec = 0;
+ 	}
+ 
+diff --git a/resolve.c b/resolve.c
+index b442162..35ecc29 100644
+--- a/resolve.c
++++ b/resolve.c
+@@ -44,6 +44,47 @@ int resolve_addr(struct sockaddr * addr, char *hostname)
+ 	return 0;
+ }
+ 
++/* On error -1 is returned, on success 0 */
++int resolve_addr6(struct sockaddr * addr, char *hostname)
++{
++	struct sockaddr_in6 *address;
++	struct addrinfo hints, *res;
++	int err;
++
++	address = (struct sockaddr_in6 *)addr;
++	memset(address, 0, sizeof(typeof(*address)));
++	address->sin6_family = AF_INET6;
++
++	memset (&hints, 0, sizeof (hints));
++	/* We only care about IPV6 results */
++	hints.ai_family = AF_INET6;
++	hints.ai_socktype = SOCK_STREAM;
++	hints.ai_flags = 0;
++
++
++	// look up
++	err = getaddrinfo(hostname, NULL, &hints, &res);
++	if(err != 0) {
++		printf("ERR: %s\n", gai_strerror(err));
++		return err;
++	}
++
++	while (res)
++	{
++		/* Check to make sure we have a valid AF_INET6 address */
++		if(res->ai_family == AF_INET6) {
++			memcpy (address, res->ai_addr, res->ai_addrlen);
++			break;
++		}
++
++		res = res->ai_next;
++	}
++	// don't forget to free the addrinfo
++	freeaddrinfo(res);
++	return 0;
++}
++
++
+ /* Like resolve_addr but exit on error */
+ void resolve(struct sockaddr *addr, char *hostname)
+ {
+@@ -52,3 +93,12 @@ void resolve(struct sockaddr *addr, char *hostname)
+ 		exit(1);
+ 	}
+ }
++
++/* Like resolve_addr but exit on error */
++void resolve6(struct sockaddr *addr, char *hostname)
++{
++	if (resolve_addr6(addr, hostname) == -1) {
++		fprintf(stderr, "Unable to resolve '%s'\n", hostname);
++		exit(1);
++	}
++}
+diff --git a/run.sh b/run.sh
+new file mode 100644
+index 0000000..e165006
+--- /dev/null
++++ b/run.sh
+@@ -0,0 +1,12 @@
++
++#make && sudo ./hping3 -S -p 80 --vxlan-source-addr 172.29.0.134 --vxlan-dest-addr 172.29.0.129 --vxlan-source-port 4789 --vxlan-dest-port 4789 --vxlan-vni 128512 172.29.0.128 --spoof 172.29.0.135 --vxlan-source-mac 55:55:55:55:55:55 --vxlan-dest-mac dd:00:55:ff:ff:ff
++
++
++#make && sudo ./hping3 -S -p 80 --vxlan-source-addr 172.29.0.134 --vxlan-dest-addr 172.29.0.129 --vxlan-source-port 4789 --vxlan-dest-port 4789 --vxlan-vni 128512 172.29.0.128 --spoof 172.29.0.135 --vxlan-source-mac dd:00:55:ff:ff:ff
++
++
++
++#sudo time  ./hping3 -S -p 80 --vxlan-source-addr 172.29.0.134 --vxlan-dest-addr 172.29.0.129 --vxlan-source-port 4789 --vxlan-dest-port 4789 --vxlan-vni 128512 172.29.0.128 --vxlan-source-mac 55:55:42:42:55:55 --vxlan-dest-mac dd:00:55:ff:ff:ff -c 10
++
++
++sudo time  ./hping3 -1 --vxlan-source-addr 172.29.0.134 --vxlan-dest-addr 172.29.0.129 --vxlan-source-port 4789 --vxlan-dest-port 4789 --vxlan-vni 128512 172.29.0.128 --vxlan-source-mac 55:55:42:42:55:55 --vxlan-dest-mac dd:00:55:ff:ff:ff -c 10
+diff --git a/send.c b/send.c
+index b12e184..b0ba2e6 100644
+--- a/send.c
++++ b/send.c
+@@ -76,6 +76,7 @@ void send_packet (int signal_id)
+ 	if (opt_rawipmode)	send_rawip();
+ 	else if (opt_icmpmode)	send_icmp();
+ 	else if (opt_udpmode)	send_udp();
++//	else if (opt_inet6mode)	send_inet6();
+ 	else			send_tcp();
+ 
+ 	sent_pkt++;
+diff --git a/sendinet6.c b/sendinet6.c
+new file mode 100644
+index 0000000..9d4d1ca
+--- /dev/null
++++ b/sendinet6.c
+@@ -0,0 +1,25 @@
++
++#include <stdio.h>
++#include <string.h>
++#include <stdlib.h>
++#include <sys/time.h>
++#include <unistd.h>
++#include <signal.h>
++#include <errno.h>
++
++#include "hping2.h"
++#include "globals.h"
++
++void send_inet6(void)
++{
++	char *packet;
++
++	packet = calloc(1, data_size);
++	if (packet == NULL) {
++		perror("[send_inet6] malloc()");
++		return;
++	}
++	data_handler(packet, data_size);
++	send_ip_handler(packet, data_size);
++	free(packet);
++}
+diff --git a/sendip.c b/sendip.c
+index f86b6bd..97e1b95 100644
+--- a/sendip.c
++++ b/sendip.c
+@@ -18,25 +18,78 @@
+ #include <stdlib.h>
+ #include <unistd.h>
+ 
++#if defined(__linux__)
++#include <linux/if_packet.h> /* struct sockaddr_ll */
++#endif /* defined(__linux__) */
++
+ #include "hping2.h"
+ #include "globals.h"
+ 
++/*
++ * platform-dependent fixup of the ip->tot_len field
++ */
++static int
++fix_tot_len(int packetsize)
++{
++#if defined OSTYPE_FREEBSD || defined OSTYPE_NETBSD || defined OSTYPE_BSDI || \
++    defined OSTYPE_GNUKFREEBSD
++/* FreeBSD */
++/* NetBSD */
++	return packetsize;
++#else
++/* Linux */
++/* OpenBSD */
++/* defined OSTYPE_DARWIN */
++	return htons(packetsize);
++#endif
++}
++
+ void send_ip (char* src, char *dst, char *data, unsigned int datalen,
+ 		int more_fragments, unsigned short fragoff, char *options,
+ 		char optlen)
+ {
++	char	*ether_frame, *vxpacket = NULL;
++	int	vxpacketsize;
+ 	char		*packet;
+ 	int		result,
+ 			packetsize;
+ 	struct myiphdr	*ip;
++	struct myiphdr	*vxip;
++	struct myip6hdr	*ip6;
++	struct myudphdr		*udp;
++	struct myvxlanhdr		*vxlan;
++	struct myetherhdr		*etherpacket;
+ 
+-	packetsize = IPHDR_SIZE + optlen + datalen;
+-	if ( (packet = malloc(packetsize)) == NULL) {
+-		perror("[send_ip] malloc()");
+-		return;
++	if (opt_debug) {
++		printf("[send_ip] This is the data received!\n");
++		unsigned int i;
++		for (i=0; i<datalen; i++) {
++			printf("%.2X ", data[i]&255);
++		}
++		printf("\n");
++	}
++
++	// Allocate space for a packet, or IPv6 ethernet header + packet
++	if (!opt_inet6mode ) {
++		packetsize = IPHDR_SIZE + optlen + datalen;
++		if ( (packet = calloc(1, packetsize)) == NULL) {
++			perror("[send_ip] inet malloc()");
++			return;
++		}
++	}
++	else {
++		// IPv6 adds an Etherframe in front of packet
++		packetsize = IP6HDR_SIZE + optlen + datalen;
++		if ( (ether_frame = calloc(1, packetsize + ETHERHDR_SIZE)) == NULL) {
++			perror("[send_ip] inet6 malloc() failed");
++			return;
++		}
++		packet = (ether_frame + ETHERHDR_SIZE);
+ 	}
+ 
+-	memset(packet, 0, packetsize);
++	// Lets make an IPv4 packet
++	if (! opt_inet6mode) {
++
+ 	ip = (struct myiphdr*) packet;
+ 
+ 	/* copy src and dst address */
+@@ -48,16 +101,7 @@ void send_ip (char* src, char *dst, char *data, unsigned int datalen,
+ 	ip->ihl		= (IPHDR_SIZE + optlen + 3) >> 2;
+ 	ip->tos		= ip_tos;
+ 
+-#if defined OSTYPE_DARWIN || defined OSTYPE_FREEBSD || defined OSTYPE_NETBSD || defined OSTYPE_BSDI || \
+-	defined OSTYPE_GNUKFREEBSD
+-/* FreeBSD */
+-/* NetBSD */
+-	ip->tot_len	= packetsize;
+-#else
+-/* Linux */
+-/* OpenBSD */
+-	ip->tot_len	= htons(packetsize);
+-#endif
++	ip->tot_len	= fix_tot_len(packetsize);
+ 
+ 	if (!opt_fragment)
+ 	{
+@@ -97,20 +141,150 @@ void send_ip (char* src, char *dst, char *data, unsigned int datalen,
+ 	if (options != NULL)
+ 		memcpy(packet+IPHDR_SIZE, options, optlen);
+ 
+-	/* copies data */
+-	memcpy(packet + IPHDR_SIZE + optlen, data, datalen);
+-	
+-    if (opt_debug == TRUE)
+-    {
+-        unsigned int i;
+-
+-        for (i=0; i<packetsize; i++)
+-            printf("%.2X ", packet[i]&255);
+-        printf("\n");
+-    }
+-	result = sendto(sockraw, packet, packetsize, 0,
+-		(struct sockaddr*)&remote, sizeof(remote));
+-	
++	if (opt_debug == TRUE) {
++		printf("Debug packet\n");
++		unsigned int i;
++		printf("This is the packet to be sent!\n");
++		for (i=0; i<packetsize; i++)
++			printf("%.2X ", packet[i]&255);
++		printf("\n");
++	}
++
++	} else // Lets make an IPv6 packet!
++	{
++		/* IPv6 header */
++		ip6 = (struct myip6hdr *) packet;
++		ip6->version	= 6;
++
++		/* IPv6 version (4 bits), Traffic class (8 bits), Flow label (20 bits) */
++		/*ip6->ip6_flow = htonl ((6 << 28) | (0 << 20) | 0);*/
++
++		/* Next header (8 bits): 44 for Frag */
++		//ip6->next_hdr = 44;
++
++		/* Hop limit (8 bits): default to maximum value */
++		ip6->hop_limit = 64;
++		ip6->payload_len	= htons(packetsize - IP6HDR_SIZE);
++		/* copy src and dst address */
++		memcpy(&ip6->saddr, src, sizeof(ip6->saddr));
++		memcpy(&ip6->daddr, dst, sizeof(ip6->daddr));
++
++		//printf("[sendip] Making an IPv6 packet - done \n");
++	}
++
++	/* Make it into a VXLAN packet, add IP/UDP */
++	if (vxlanmode != 0) {
++		if (opt_debug) printf("[sendip] vxlanmode set\n");
++		vxpacketsize = packetsize + IPHDR_SIZE + UDPHDR_SIZE + VXLANHDR_SIZE + ETHERHDR_SIZE ;
++		if ( (vxpacket = calloc(1, vxpacketsize)) == NULL) {
++			perror("[send_ip] malloc() VXLAN");
++			return;
++		}
++		/* TODOTODO ipv6 handling here? IPHDR_SIZE/IPHDR6_SIZE etc? */
++		vxip = (struct myiphdr*) vxpacket;
++		/* build VXLAN ip header */
++		vxip->version	= 4;
++		vxip->ihl		= (IPHDR_SIZE + optlen + 3) >> 2;
++		vxip->tos		= ip_tos;
++		/* copy src and dst address */
++		memcpy(&vxip->saddr, (struct sockaddr*)&vxlan_local.sin_addr.s_addr, sizeof(vxip->saddr));
++		memcpy(&vxip->daddr, (struct sockaddr*)&vxlan_remote.sin_addr.s_addr, sizeof(vxip->daddr));
++		//(struct sockaddr*)&vxlan_local.sin_addr.s_addr
++
++		vxip->ttl		= src_ttl;
++		if (!opt_fragment)
++		{
++			vxip->id		= (src_id == -1) ?
++				htons((unsigned short) rand()) :
++				htons((unsigned short) src_id);
++		}
++
++		vxip->tot_len	= fix_tot_len(vxpacketsize);
++
++		vxip->protocol = 17;	/* VXLAN is UDP  */
++		udp =  (struct myudphdr*) (vxpacket+IPHDR_SIZE);
++		/* udp header */
++		udp->uh_dport	= htons(vxdst_port);
++		udp->uh_sport	= htons(vxsrc_port);
++		udp->uh_ulen	= htons(vxpacketsize-20);
++//		udp->uh_sum = 0 ;  // Already zeroed, so skip
++
++		vxlan =  (struct myvxlanhdr*) (vxpacket+IPHDR_SIZE+UDPHDR_SIZE);
++		vxlan->flags	= 8;
++		vxlan->vni_high	= vxvni / 65536;
++		vxlan->vni_med	= (vxvni - vxlan->vni_high * 65536 ) / 256;
++		vxlan->vni_low	= vxvni - vxlan->vni_med * 256 - vxlan->vni_high * 65536;
++//		vxlan->vni_low	= vxvni;
++
++		// Only IPv4 right now, type 0x0800, IPv6 would bx 0x86DD
++		etherpacket =  (struct myetherhdr*) (vxpacket+IPHDR_SIZE+UDPHDR_SIZE+VXLANHDR_SIZE);
++		memcpy(&etherpacket->dest, vxdst_mac, 6);
++		memcpy(&etherpacket->source, vxsrc_mac, 6);
++		etherpacket->type	= htons(0x0800);
++
++		memcpy(packet + IPHDR_SIZE + optlen, data, datalen);
++		memcpy(vxpacket + IPHDR_SIZE + UDPHDR_SIZE + VXLANHDR_SIZE + ETHERHDR_SIZE , packet, packetsize);
++
++		if (opt_debug == TRUE) {
++			unsigned int i;
++			printf("VXLAN packet debug\n");
++			for (i=0; i<vxpacketsize; i++)
++				printf("%.2X ", vxpacket[i]&255);
++			printf("\n");
++		}
++		free(packet);
++		packet = vxpacket;
++	}
++	else if ( ! opt_inet6mode ){
++		/* copies data */
++		printf("[sendip] Segmentation fault here?\n");
++		memcpy(packet + IPHDR_SIZE + optlen, data, datalen);
++	}
++
++
++
++	// Sending here?
++	if (! opt_inet6mode) {
++		result = sendto(sockraw, packet, packetsize, 0,
++			(struct sockaddr*)&remote, sizeof(remote));
++		free(packet);
++	} else {
++		//printf("[sendip] Preparing Ethernet frame with IPv6 packet\n");
++		// To control this part - need more than raw, we use Ethernet frames
++		// Todo: incomplete, should find MAC addresses and enter here!
++		/* Destination and Source MAC addresses */
++		//memcpy(ether_frame, dst_mac, 6 * sizeof (uint8_t));
++		//memcpy(ether_frame + 6, src_mac, 6 * sizeof (uint8_t));
++		/* Next is ethernet type code (ETH_P_IPV6 for IPv6) */
++
++
++		// IPv6 needs to be sent as an ethernet frame
++		// Only IPv6 right now, type 0x0800, IPv6 would bx 0x86DD
++		etherpacket =  (struct myetherhdr*) ether_frame;
++		memcpy(&etherpacket->dest, dst_mac, 6);
++		memcpy(&etherpacket->source, src_mac, 6);
++		etherpacket->type	= htons(0x86DD);
++
++		if (opt_rawipmode)	ip6->next_hdr = raw_ip_protocol;
++		else if	(opt_icmpmode)	ip6->next_hdr = 1;	/* icmp */
++		else if (opt_udpmode)	ip6->next_hdr = 17;	/* udp  */
++		else			ip6->next_hdr = 6;	/* tcp  */
++
++		// Copy rest of packet
++		memcpy(packet + IP6HDR_SIZE + optlen, data, datalen);
++
++		if (opt_debug == TRUE) {
++			printf("[sendip] This is the Ethernet frame to be sent!\n");
++			unsigned int i;
++			for (i=0; i<packetsize + ETHERHDR_SIZE; i++)
++				printf("%.2X ", ether_frame[i]&255);
++			printf("\n");
++		}
++		result = sendto(sockraw, ether_frame, packetsize + ETHERHDR_SIZE , 0,
++				(struct sockaddr *) &rawdevice, sizeof (rawdevice));
++		free(ether_frame);
++	}
++
+ 	if (result == -1 && errno != EINTR && !opt_rand_dest && !opt_rand_source) {
+ 		perror("[send_ip] sendto");
+ 		if (close(sockraw) == -1)
+@@ -120,8 +294,6 @@ void send_ip (char* src, char *dst, char *data, unsigned int datalen,
+ 		exit(1);
+ 	}
+ 
+-	free(packet);
+-
+ 	/* inc packet id for safe protocol */
+ 	if (opt_safe && !eof_reached)
+ 		src_id++;
+diff --git a/sendip_handler.c b/sendip_handler.c
+index fac881b..f3f6001 100644
+--- a/sendip_handler.c
++++ b/sendip_handler.c
+@@ -17,6 +17,16 @@
+ 
+ void send_ip_handler(char *packet, unsigned int size)
+ {
++	char *local_sin_addr = NULL;
++	char *remote_sin_addr = NULL;
++	if (opt_inet6mode) {
++		local_sin_addr = (char*)&local6.sin6_addr;
++		remote_sin_addr = (char*)&remote6.sin6_addr;
++	} else { // inet4
++		local_sin_addr = (char*)&local.sin_addr;
++		remote_sin_addr = (char*)&remote.sin_addr;
++	}
++
+ 	ip_optlen = ip_opt_build(ip_opt);
+ 
+ 	if (!opt_fragment && (size+ip_optlen+20 > h_if_mtu))
+@@ -36,10 +46,10 @@ void send_ip_handler(char *packet, unsigned int size)
+ 
+ 		if (opt_mf) fragment_flag |= MF; /* more fragments */
+ 		if (opt_df) fragment_flag |= DF; /* don't fragment */
+-		send_ip((char*)&local.sin_addr,
+-			(char*)&remote.sin_addr,
+-			packet, size, fragment_flag, ip_frag_offset,
+-			ip_opt, ip_optlen);
++		send_ip(local_sin_addr,
++		    remote_sin_addr,
++		    packet, size, fragment_flag, ip_frag_offset,
++		    ip_opt, ip_optlen);
+ 	}
+ 	else
+ 	{
+@@ -50,20 +60,20 @@ void send_ip_handler(char *packet, unsigned int size)
+ 			if (remainder <= virtual_mtu)
+ 				break;
+ 
+-			send_ip((char*)&local.sin_addr,
+-				(char*)&remote.sin_addr,
+-				packet+frag_offset,
+-				virtual_mtu, MF, frag_offset,
+-				ip_opt, ip_optlen);
++			send_ip(local_sin_addr,
++			    remote_sin_addr,
++			    packet+frag_offset,
++			    virtual_mtu, MF, frag_offset,
++			    ip_opt, ip_optlen);
+ 
+ 			remainder-=virtual_mtu;
+ 			frag_offset+=virtual_mtu;
+ 		}
+ 
+-		send_ip((char*)&local.sin_addr,
+-			(char*)&remote.sin_addr,
+-			packet+frag_offset,
+-			remainder, NF, frag_offset,
+-			ip_opt, ip_optlen);
++		send_ip(local_sin_addr,
++		    remote_sin_addr,
++		    packet+frag_offset,
++		    remainder, NF, frag_offset,
++		    ip_opt, ip_optlen);
+ 	}
+ }
+diff --git a/sendtcp.c b/sendtcp.c
+index 7c5b210..fded279 100644
+--- a/sendtcp.c
++++ b/sendtcp.c
+@@ -28,7 +28,11 @@ void send_tcp(void)
+ 	char			*packet, *data;
+ 	struct mytcphdr		*tcp;
+ 	struct pseudohdr	*pseudoheader;
++	struct pseudohdr6	*pseudoheader6;
+ 	unsigned char		*opts;
++	const size_t pseudo_hdr_size = (opt_inet6mode)
++	    ? (PSEUDOHDR6_SIZE)
++	    : (PSEUDOHDR_SIZE); /* inet4 */
+ 
+ 	if (opt_tcp_mss)
+ 		tcp_opt_size += 4;
+@@ -36,23 +40,40 @@ void send_tcp(void)
+ 		tcp_opt_size += 12;
+ 
+ 	packet_size = TCPHDR_SIZE + tcp_opt_size + data_size;
+-	packet = malloc(PSEUDOHDR_SIZE + packet_size);
++	if (opt_verbose)
++		printf("[send_tcp] starting with packet_size %d \n",
++		    packet_size);
++
++	packet = calloc(1, pseudo_hdr_size + packet_size);
+ 	if (packet == NULL) {
+ 		perror("[send_tcphdr] malloc()");
+ 		return;
+ 	}
+-	pseudoheader = (struct pseudohdr*) packet;
+-	tcp =  (struct mytcphdr*) (packet+PSEUDOHDR_SIZE);
+-	opts = (unsigned char*) (packet+PSEUDOHDR_SIZE+TCPHDR_SIZE);
+-	data = (char*) (packet+PSEUDOHDR_SIZE+TCPHDR_SIZE+tcp_opt_size);
+-	
+-	memset(packet, 0, PSEUDOHDR_SIZE+packet_size);
+-
+-	/* tcp pseudo header */
+-	memcpy(&pseudoheader->saddr, &local.sin_addr.s_addr, 4);
+-	memcpy(&pseudoheader->daddr, &remote.sin_addr.s_addr, 4);
+-	pseudoheader->protocol		= 6; /* tcp */
+-	pseudoheader->length		= htons(TCPHDR_SIZE+tcp_opt_size+data_size);
++
++	if ( ! opt_inet6mode ) {
++		// IPv4
++		pseudoheader = (struct pseudohdr*) packet;
++
++		/* tcp pseudo header */
++		memcpy(&pseudoheader->saddr, &local.sin_addr.s_addr, 4);
++		memcpy(&pseudoheader->daddr, &remote.sin_addr.s_addr, 4);
++		pseudoheader->protocol		= 6; /* tcp */
++		pseudoheader->length		= htons(TCPHDR_SIZE+tcp_opt_size+data_size);
++
++	} else {
++		// IPv6
++		pseudoheader6 = (struct pseudohdr6*) packet;
++
++		/* tcp pseudo header */
++		memcpy(&pseudoheader6->saddr, &local6.sin6_addr, 16);
++		memcpy(&pseudoheader6->daddr, &remote6.sin6_addr, 16);
++		pseudoheader6->protocol		= 6; /* tcp */
++		pseudoheader6->length		= htons(TCPHDR_SIZE+tcp_opt_size+data_size);
++	}
++
++	tcp =  (struct mytcphdr*) (packet+pseudo_hdr_size);
++	opts = (unsigned char*) (packet+pseudo_hdr_size+TCPHDR_SIZE);
++	data = (char*) (packet+pseudo_hdr_size+TCPHDR_SIZE+tcp_opt_size);
+ 
+ 	/* tcp header */
+ 	tcp->th_dport	= htons(dst_port);
+@@ -60,7 +81,8 @@ void send_tcp(void)
+ 
+ 	/* sequence number and ack are random if not set */
+ 	tcp->th_seq = (set_seqnum) ? htonl(tcp_seqnum) : htonl(rand());
+-	tcp->th_ack = (set_ack) ? htonl(tcp_ack) : htonl(rand());
++	// TODOTODO is this supposed to be commented out?
++	//tcp->th_ack = (set_ack) ? htonl(tcp_ack) : htonl(rand());
+ 
+ 	tcp->th_off	= src_thoff + (tcp_opt_size >> 2);
+ 	tcp->th_win	= htons(src_winsize);
+@@ -90,23 +112,37 @@ void send_tcp(void)
+ 	data_handler(data, data_size);
+ 
+ 	/* compute checksum */
++	if ( ! opt_inet6mode ) {
+ #ifdef STUPID_SOLARIS_CHECKSUM_BUG
+ 	tcp->th_sum = packet_size;
+ #else
+ 	tcp->th_sum = cksum((u_short*) packet, PSEUDOHDR_SIZE +
+ 		      packet_size);
+ #endif
++	} else {
++		tcp->th_sum = cksum((u_short*) packet, PSEUDOHDR6_SIZE +
++			      packet_size);
++	}
+ 
+ 	/* adds this pkt in delaytable */
+ 	delaytable_add(sequence, src_port, time(NULL), get_usec(), S_SENT);
+ 
++	if (opt_debug == TRUE) {
++		unsigned int i;
++		printf("[send_tcp] packet debug with pseudo header %d\n", packet_size);
++		for (i=0; i<(PSEUDOHDR6_SIZE+packet_size); i++)
++			printf("%.2X ", packet[i]&255);
++		printf("\n");
++	}
++
++
+ 	/* send packet */
+-	send_ip_handler(packet+PSEUDOHDR_SIZE, packet_size);
++	send_ip_handler(packet+pseudo_hdr_size, packet_size);
+ 	free(packet);
+ 
+ 	sequence++;	/* next sequence number */
+ 	if (!opt_keepstill)
+-		src_port = (sequence + initsport) % 65536;
++		src_port = (sequence + initsport) & 0xFFFF; // % 65536;
+ 
+ 	if (opt_force_incdport)
+ 		dst_port++;
+diff --git a/sendudp.c b/sendudp.c
+index 7d82e24..58e815c 100644
+--- a/sendudp.c
++++ b/sendudp.c
+@@ -29,18 +29,20 @@ void send_udp(void)
+ 	char			*packet, *data;
+ 	struct myudphdr		*udp;
+ 	struct pseudohdr *pseudoheader;
++	struct pseudohdr6	*pseudoheader6;
++	size_t pseudo_hdr_size = (opt_inet6mode)
++	    ? (PSEUDOHDR6_SIZE)
++	    : (PSEUDOHDR_SIZE);
+ 
+ 	packet_size = UDPHDR_SIZE + data_size;
+-	packet = malloc(PSEUDOHDR_SIZE + packet_size);
++	packet = calloc(1, pseudo_hdr_size + packet_size);
+ 	if (packet == NULL) {
+ 		perror("[send_udphdr] malloc()");
+ 		return;
+ 	}
++
++	if ( !opt_inet6mode ) {
+ 	pseudoheader = (struct pseudohdr*) packet;
+-	udp =  (struct myudphdr*) (packet+PSEUDOHDR_SIZE);
+-	data = (char*) (packet+PSEUDOHDR_SIZE+UDPHDR_SIZE);
+-	
+-	memset(packet, 0, PSEUDOHDR_SIZE+packet_size);
+ 
+ 	/* udp pseudo header */
+ 	memcpy(&pseudoheader->saddr, &local.sin_addr.s_addr, 4);
+@@ -48,6 +50,20 @@ void send_udp(void)
+ 	pseudoheader->protocol		= 17; /* udp */
+ 	pseudoheader->length		= htons(packet_size);
+ 
++	} else {
++	// IPv6
++	pseudoheader6 = (struct pseudohdr6*) packet;
++
++	/* udp pseudo header */
++	memcpy(&pseudoheader6->saddr, &local6.sin6_addr, 16);
++	memcpy(&pseudoheader6->daddr, &remote6.sin6_addr, 16);
++	pseudoheader6->protocol		= 17; /* udp */
++	pseudoheader6->length		= htons(packet_size);
++	}
++
++	udp =  (struct myudphdr*) (packet + pseudo_hdr_size);
++	data = (char*) (packet+pseudo_hdr_size+UDPHDR_SIZE);
++
+ 	/* udp header */
+ 	udp->uh_dport	= htons(dst_port);
+ 	udp->uh_sport	= htons(src_port);
+@@ -60,21 +76,30 @@ void send_udp(void)
+ #ifdef STUPID_SOLARIS_CHECKSUM_BUG
+ 	udp->uh_sum = packet_size;
+ #else
+-	udp->uh_sum = cksum((__u16*) packet, PSEUDOHDR_SIZE +
++	udp->uh_sum = cksum((__u16*) packet, pseudo_hdr_size +
+ 		      packet_size);
+ #endif
+ 
+ 	/* adds this pkt in delaytable */
+ 	delaytable_add(sequence, src_port, time(NULL), get_usec(), S_SENT);
+ 
++	if (opt_debug == TRUE) {
++		unsigned int i;
++		printf("[send_udp] packet debug with pseudo header %zu + %d\n",
++		    pseudo_hdr_size, packet_size);
++		for (i=0; i<(pseudo_hdr_size+packet_size); i++)
++			printf("%.2X ", packet[i]&255);
++		printf("\n");
++	}
++
+ 	/* send packet */
+-	send_ip_handler(packet+PSEUDOHDR_SIZE, packet_size);
++	send_ip_handler(packet+pseudo_hdr_size, packet_size);
+ 	free(packet);
+ 
+ 	sequence++;	/* next sequence number */
+ 
+ 	if (!opt_keepstill)
+-		src_port = (sequence + initsport) % 65536;
++		src_port = (sequence + initsport) & 0xffff; // % 65536;
+ 
+ 	if (opt_force_incdport)
+ 		dst_port++;
+diff --git a/usage.c b/usage.c
+index d662eb7..9dd583b 100644
+--- a/usage.c
++++ b/usage.c
+@@ -58,6 +58,8 @@ void	show_usage(void)
+ "  --lsrr           loose source routing and record route\n"
+ "  --ssrr           strict source routing and record route\n"
+ "  -H  --ipproto    set the IP protocol field, only in RAW IP mode\n"
++"IPv6\n"
++"  --inet6          send IPv6 packets\n"
+ "ICMP\n"
+ "  -C  --icmptype   icmp type (default echo request)\n"
+ "  -K  --icmpcode   icmp code (default 0)\n"
+@@ -89,6 +91,16 @@ void	show_usage(void)
+ "  --tcpexitcode    use last tcp->th_flags as exit code\n"
+ "  --tcp-mss        enable the TCP MSS option with the given value\n"
+ "  --tcp-timestamp  enable the TCP timestamp option to guess the HZ/uptime\n"
++"VXLAN encapsulation\n"
++"  --vxlan-source-addr spoof coming from this\n"
++"  --vxlan-dest-addr send to this destination\n"
++"  --vxlan-source-port VXLAN source port RFC 7384 use 4789 Linux kernel 8472 \n"
++"  --vxlan-dest-port VXLAN destination port\n"
++"  --vxlan-vni VXLAN Network Identifier 24-bit integer\n"
++"  --vxlan-source-mac standard MAC address\n"
++"  --vxlan-dest-mac standard MAC address\n"
++"  --vxlan-rand-source-mac randomize MAC\n"
++"  --vxlan-rand-dest-mac randomiz MAC\n"
+ "Clock skew detection\n"
+ "  --clock-skew     enable clock skew detection. Try with -S against open port\n"
+ "  --clock-skew-win window of time (in seconds) for CS detection. Default 300\n"
+-- 
+2.30.2
+

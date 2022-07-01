@@ -1,0 +1,194 @@
+From 98cc673baf68069f54c13a5a7a83cec8f622c725 Mon Sep 17 00:00:00 2001
+From: Romain Francoise <rfrancoise@debian.org>
+Date: Tue, 28 Jun 2022 13:02:41 +0200
+Subject: [PATCH 12/23] Fix spelling error in binary (lintian -IE)
+
+---
+ ars.c            | 2 +-
+ ars.h            | 4 ++--
+ datahandler.c    | 2 +-
+ getifname.c      | 2 +-
+ hping2.h         | 4 ++--
+ parseoptions.c   | 2 +-
+ sendicmp.c       | 2 +-
+ sendip_handler.c | 2 +-
+ sendtcp.c        | 2 +-
+ sendudp.c        | 2 +-
+ usage.c          | 6 +++---
+ 11 files changed, 15 insertions(+), 15 deletions(-)
+
+diff --git a/ars.c b/ars.c
+index aaf9e52..a16a2f5 100644
+--- a/ars.c
++++ b/ars.c
+@@ -698,7 +698,7 @@ int ars_udptcp_cksum(struct ars_packet *pkt, int layer, u_int16_t *sum)
+ 	memcpy(&pseudo.daddr, &ip->daddr, 4);
+ 	pseudo.protocol = (pkt->p_layer[layer].l_type == ARS_TYPE_TCP)
+ 		? ARS_IPPROTO_TCP : ARS_IPPROTO_UDP;
+-	pseudo.lenght = htons(ars_relative_size(pkt, layer));
++	pseudo.length = htons(ars_relative_size(pkt, layer));
+ 
+ 	/* Finally do the checksum */
+ 	ars_multi_cksum(&mc, ARS_MC_INIT, NULL, 0);
+diff --git a/ars.h b/ars.h
+index ba460fe..51b264f 100644
+--- a/ars.h
++++ b/ars.h
+@@ -67,7 +67,7 @@
+ #define ARS_MAX_IP_SIZE		65535
+ 
+ #define ARS_IP_MF ((unsigned short)0x2000)	/* more fragments */
+-#define ARS_IP_DF ((unsigned short)0x4000)	/* dont fragment */
++#define ARS_IP_DF ((unsigned short)0x4000)	/* don't fragment */
+ #define ARS_IP_RF ((unsigned short)0x8000)	/* reserved fragment flag */
+ 
+ #define ARS_IPOPT_COPY		0x80
+@@ -308,7 +308,7 @@ struct ars_pseudohdr
+ 	__u32 daddr;
+ 	__u8  zero;
+ 	__u8  protocol;
+-	__u16 lenght;
++	__u16 length;
+ };
+ 
+ /* The IGRP header structure */
+diff --git a/datahandler.c b/datahandler.c
+index be1b24e..cdcb55d 100644
+--- a/datahandler.c
++++ b/datahandler.c
+@@ -26,7 +26,7 @@ void data_handler(char *data, int data_size)
+ 	}
+ 
+ 	if (opt_sign) {
+-		memcpy(data, sign, signlen); /* lenght pre-checked */
++		memcpy(data, sign, signlen); /* length pre-checked */
+ 		data+=signlen;
+ 		data_size-=signlen;
+ 	}
+diff --git a/getifname.c b/getifname.c
+index 86b387f..b79db39 100644
+--- a/getifname.c
++++ b/getifname.c
+@@ -206,7 +206,7 @@ int get_if_name(void)
+                                 printf("DEBUG: Output interface address: %s\n",
+                                         inet_ntoa(output_if_addr.sin_addr));
+ 			/* Put something in saved_ifname in order to tell
+-			   that the output adress is known */
++			   that the output address is known */
+ 			saved_ifname[0] = 'X'; saved_ifname[1] = 0;
+                 } else {
+                         fprintf(stderr, "Warning: Unable to guess the output "
+diff --git a/hping2.h b/hping2.h
+index 4990147..4506009 100644
+--- a/hping2.h
++++ b/hping2.h
+@@ -138,7 +138,7 @@
+ 	
+ /* fragmentation defines */
+ #define MF ((unsigned short)0x2000)	/* more fragments */
+-#define DF ((unsigned short)0x4000)	/* dont fragment */
++#define DF ((unsigned short)0x4000)	/* don't fragment */
+ #define NF ((unsigned short)0x0000)	/* no more fragments */
+ 
+ /* ip options defines */
+@@ -341,7 +341,7 @@ struct pseudohdr
+ 	__u32 daddr;
+ 	__u8  zero;
+ 	__u8  protocol;
+-	__u16 lenght;
++	__u16 length;
+ };
+ 
+ #define PSEUDOHDR_SIZE sizeof(struct pseudohdr)
+diff --git a/parseoptions.c b/parseoptions.c
+index cb95014..8ae2e27 100644
+--- a/parseoptions.c
++++ b/parseoptions.c
+@@ -179,7 +179,7 @@ void parse_route(unsigned char *route, unsigned int *route_len, char *str)
+                         str[j++] = '/';
+                     break;
+                 }
+-                fprintf(stderr, "invalid IP adress in route\n");
++                fprintf(stderr, "invalid IP address in route\n");
+                 fail_parse_route();
+             case ':':
+                 if ((!i) && j && j < 4)
+diff --git a/sendicmp.c b/sendicmp.c
+index e301b0f..cb2f73f 100644
+--- a/sendicmp.c
++++ b/sendicmp.c
+@@ -243,7 +243,7 @@ void send_icmp_other(void)
+ 	memcpy(&pseudoheader->saddr, &icmp_ip_src.sin_addr.s_addr, 4);
+ 	memcpy(&pseudoheader->daddr, &icmp_ip_dst.sin_addr.s_addr, 4);
+ 	pseudoheader->protocol = icmp_ip.protocol;
+-	pseudoheader->lenght = icmp_ip.tot_len;
++	pseudoheader->length = icmp_ip.tot_len;
+ 	icmp_udp->uh_sport = htons(icmp_ip_srcport);
+ 	icmp_udp->uh_dport = htons(icmp_ip_dstport);
+ 	icmp_udp->uh_ulen  = htons(UDPHDR_SIZE + udp_data_len);
+diff --git a/sendip_handler.c b/sendip_handler.c
+index 9992d04..fac881b 100644
+--- a/sendip_handler.c
++++ b/sendip_handler.c
+@@ -35,7 +35,7 @@ void send_ip_handler(char *packet, unsigned int size)
+ 		unsigned short fragment_flag = 0;
+ 
+ 		if (opt_mf) fragment_flag |= MF; /* more fragments */
+-		if (opt_df) fragment_flag |= DF; /* dont fragment */
++		if (opt_df) fragment_flag |= DF; /* don't fragment */
+ 		send_ip((char*)&local.sin_addr,
+ 			(char*)&remote.sin_addr,
+ 			packet, size, fragment_flag, ip_frag_offset,
+diff --git a/sendtcp.c b/sendtcp.c
+index 6765ad4..fa0822e 100644
+--- a/sendtcp.c
++++ b/sendtcp.c
+@@ -50,7 +50,7 @@ void send_tcp(void)
+ 	memcpy(&pseudoheader->saddr, &local.sin_addr.s_addr, 4);
+ 	memcpy(&pseudoheader->daddr, &remote.sin_addr.s_addr, 4);
+ 	pseudoheader->protocol		= 6; /* tcp */
+-	pseudoheader->lenght		= htons(TCPHDR_SIZE+tcp_opt_size+data_size);
++	pseudoheader->length		= htons(TCPHDR_SIZE+tcp_opt_size+data_size);
+ 
+ 	/* tcp header */
+ 	tcp->th_dport	= htons(dst_port);
+diff --git a/sendudp.c b/sendudp.c
+index 6da7cd2..7d82e24 100644
+--- a/sendudp.c
++++ b/sendudp.c
+@@ -46,7 +46,7 @@ void send_udp(void)
+ 	memcpy(&pseudoheader->saddr, &local.sin_addr.s_addr, 4);
+ 	memcpy(&pseudoheader->daddr, &remote.sin_addr.s_addr, 4);
+ 	pseudoheader->protocol		= 17; /* udp */
+-	pseudoheader->lenght		= htons(packet_size);
++	pseudoheader->length		= htons(packet_size);
+ 
+ 	/* udp header */
+ 	udp->uh_dport	= htons(dst_port);
+diff --git a/usage.c b/usage.c
+index 8598f15..0674cd2 100644
+--- a/usage.c
++++ b/usage.c
+@@ -50,7 +50,7 @@ void	show_usage(void)
+ "  -r  --rel        relativize id field          (to estimate host traffic)\n"
+ "  -f  --frag       split packets in more frag.  (may pass weak acl)\n"
+ "  -x  --morefrag   set more fragments flag\n"
+-"  -y  --dontfrag   set dont fragment flag\n"
++"  -y  --dontfrag   set don't fragment flag\n"
+ "  -g  --fragoff    set the fragment offset\n"
+ "  -m  --mtu        set virtual mtu, implies --frag if packet size > mtu\n"
+ "  -o  --tos        type of service (default 0x00), try --tos help\n"
+@@ -131,8 +131,8 @@ void icmp_help(void)
+ "ICMP help:\n"
+ " ICMP concerned packet options:\n"
+ "  --icmp-ipver     set ip version               ( default 4 )\n"
+-"  --icmp-iphlen    set ip header lenght         ( default IPHDR_SIZE >> 2)\n"
+-"  --icmp-iplen     set ip total lengtht         ( default real lenght )\n"
++"  --icmp-iphlen    set ip header length         ( default IPHDR_SIZE >> 2)\n"
++"  --icmp-iplen     set ip total length          ( default real length )\n"
+ "  --icmp-ipid      set ip id                    ( default random )\n"
+ "  --icmp-ipproto   set ip protocol              ( default IPPROTO_TCP )\n"
+ "  --icmp-ipsrc     set ip source                ( default 0.0.0.0 )\n"
+-- 
+2.30.2
+

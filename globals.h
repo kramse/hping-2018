@@ -145,8 +145,8 @@ extern char	ifname[1024],
 
 extern struct ifreq ifr;
 extern struct sockaddr_ll rawdevice;
-uint8_t src_mac[6];
-uint8_t dst_mac[6];
+extern uint8_t src_mac[6];
+extern uint8_t dst_mac[6];
 
 extern struct sockaddr_in icmp_ip_src, icmp_ip_dst, icmp_gw, vxlan_local, local, vxlan_remote, remote;
 extern struct sockaddr_in6 local6, remote6;

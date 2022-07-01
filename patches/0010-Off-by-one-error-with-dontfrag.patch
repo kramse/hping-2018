@@ -1,0 +1,25 @@
+From 97aa73efc73af15eff7895f76e370216b0b7e74c Mon Sep 17 00:00:00 2001
+From: Romain Francoise <rfrancoise@debian.org>
+Date: Tue, 28 Jun 2022 12:57:16 +0200
+Subject: [PATCH 10/23] Off-by-one error with --dontfrag
+
+---
+ sendip_handler.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/sendip_handler.c b/sendip_handler.c
+index 545beb9..9992d04 100644
+--- a/sendip_handler.c
++++ b/sendip_handler.c
+@@ -19,7 +19,7 @@ void send_ip_handler(char *packet, unsigned int size)
+ {
+ 	ip_optlen = ip_opt_build(ip_opt);
+ 
+-	if (!opt_fragment && (size+ip_optlen+20 >= h_if_mtu))
++	if (!opt_fragment && (size+ip_optlen+20 > h_if_mtu))
+ 	{
+ 		/* auto-activate fragmentation */
+ 		virtual_mtu = h_if_mtu-20;
+-- 
+2.30.2
+

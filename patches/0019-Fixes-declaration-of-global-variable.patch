@@ -1,0 +1,25 @@
+From ecfc27d7cfd4f73a943bb9531e2650682766c4ec Mon Sep 17 00:00:00 2001
+From: Marcio de Souza Oliveira <marciosouza@debian.org>
+Date: Tue, 28 Jun 2022 13:48:25 +0200
+Subject: [PATCH 19/23] Fixes declaration of global variable
+
+---
+ hping2.h | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/hping2.h b/hping2.h
+index 4506009..b1c02da 100644
+--- a/hping2.h
++++ b/hping2.h
+@@ -357,7 +357,7 @@ struct delaytable_element {
+ 	int status;
+ };
+ 
+-volatile struct delaytable_element delaytable[TABLESIZE];
++extern volatile struct delaytable_element delaytable[TABLESIZE];
+ 
+ /* protos */
+ void	nop(void);				/* nop */
+-- 
+2.30.2
+
