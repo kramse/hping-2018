@@ -12,6 +12,30 @@ https://github.com/antirez/hping.git
 1) take the patches directory from THIS repository,
 either copy the dir or the file kramse-hping3-2022.tar.gz
 
+Apply them:
+
+user@Projects:hping$ pwd
+18:40 <kramsev6> /home/user/projects/github/hping
+
+```
+user@Projects:hping$ patch < patches/0001
+```
+and continue with the rest
+
+Note: some of them seem to have small problems identifying the file to patch,
+just enter it manually like
+
+```
+|diff --git a/docs/hping3.8 b/docs/hping3.8
+|index 3da78ed..ba24276 100644
+|--- a/docs/hping3.8
+|+++ b/docs/hping3.8
+--------------------------
+File to patch: **docs/hping3.8**
+```
+
+If you are a package maintainer, feel free to integrate these.
+
 2) Run configure and make
 ./configure --no-tcl
 make
